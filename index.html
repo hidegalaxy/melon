@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Melon</title>
+<!-- Icono y pantalla completa al añadirla a la pantalla de inicio. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Melon">
+<meta name="theme-color" content="#0b0e0e">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icono-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Familia Lima/Plum/Tangerine/Cherry: móvil oscuro, mucho aire, un solo color fuerte (melón) y el semáforo aparte. */
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e0e;
+    --surface: #141919;
+    --line: #1f2626;
+    --track: #283131;
+    --text: #eef4f2;
+    --muted: #93a19d;
+    --dim: #62706c;
+    --melon: #5fd9c3;
+    --ink: #0b0e0e;
+    --bien: #7bd88f;
+    --ojo: #ffc95c;
+    --mal: #ff7a6b;
+    --profundo: #4a78f0;
+    --ligero: #22a3b6;
+    --rem: #9a6fe6;
+    --despierto: #d47450;
+    --font: 'Space Grotesk', -apple-system, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 var(--font); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--melon); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  .app { height: 100%; display: flex; flex-direction: column; max-width: 430px; margin: 0 auto; position: relative; overflow: hidden; }
+  @media (min-width: 640px) {
+    body { display: flex; align-items: center; justify-content: center; padding-block: 24px; }
+    .app { height: min(880px, 100%); width: 400px; border: 1px solid var(--line); border-radius: 40px; }
+  }
+  .carga { position: absolute; top: env(safe-area-inset-top, 0px); left: 0; right: 0; height: 2px; overflow: hidden; z-index: 7; opacity: 0; transition: opacity .2s; }
+  .carga.ver { opacity: 1; }
+  .carga::after { content: ''; position: absolute; top: 0; bottom: 0; width: 35%; background: var(--melon); animation: carga 1s ease-in-out infinite; }
+  @keyframes carga { from { left: -35%; } to { left: 100%; } }
+
+  header.top { display: flex; align-items: center; gap: 10px; padding: calc(18px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) 8px max(20px, env(safe-area-inset-left, 0px)); }
+  header.top h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -.03em; }
+  header.top span { color: var(--muted); font-size: 15px; flex: 1; padding-top: 6px; }
+  .redondo { width: 42px; height: 42px; border-radius: 14px; border: 0; background: var(--melon); color: var(--ink); display: grid; place-items: center; flex: 0 0 42px; }
+  .redondo.sec { background: var(--surface); color: var(--text); }
+
+  main { flex: 1; min-height: 0; overflow-y: auto; padding: 8px max(20px, env(safe-area-inset-right, 0px)) 28px max(20px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 22px; }
+  .eti { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+  .num { font-variant-numeric: tabular-nums; }
+  h3 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+  .bloque { display: flex; flex-direction: column; gap: 12px; }
+  .bloque > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .nota { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.5; }
+  .nota b { color: var(--text); font-weight: 600; }
+  .pie { font-size: 12px; color: var(--dim); text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .tarjeta { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .tarjeta p { margin: 0; line-height: 1.5; }
+  .tarjeta.mal { border-color: rgba(255,122,107,.45); }
+  .tarjeta.ojo { border-color: rgba(255,201,92,.4); }
+  .tarjeta.mal .eti { color: var(--mal); }
+  .tarjeta.ojo .eti { color: var(--ojo); }
+  .demo { font-size: 13px; color: var(--ink); background: var(--ojo); border-radius: 14px; padding: 10px 14px; line-height: 1.4; }
+  .demo a { color: inherit; font-weight: 700; }
+  .btn { border: 0; border-radius: 14px; background: var(--melon); color: var(--ink); font-weight: 700; padding: 12px 16px; }
+  .btn.sec { background: var(--track); color: var(--text); font-weight: 600; }
+  .btn:disabled { background: var(--track); color: var(--dim); cursor: default; }
+  .enlace { background: none; border: 0; padding: 0; color: var(--melon); font-size: 13px; font-weight: 600; text-decoration: none; }
+
+  /* Today: la frase grande */
+  .hero { background: var(--melon); color: var(--ink); border-radius: 26px; padding: 20px 22px; display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; align-items: center; }
+  .hero .eti { color: rgba(11,14,14,.6); grid-column: 1 / -1; }
+  .anillo { width: 92px; height: 92px; position: relative; }
+  .anillo svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .anillo div { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
+  .anillo b { font-size: 32px; letter-spacing: -.04em; font-variant-numeric: tabular-nums; display: block; }
+  .anillo small { display: block; font-size: 10px; font-weight: 600; opacity: .65; margin-top: 3px; letter-spacing: .03em; }
+  .anillo circle:last-child { transition: stroke-dasharray .8s ease; }
+  .hero h2 { margin: 0; font-size: 25px; line-height: 1.1; letter-spacing: -.03em; text-wrap: balance; }
+  .hero p { grid-column: 1 / -1; margin: 6px 0 0; font-size: 15px; line-height: 1.45; font-weight: 500; }
+  .hero p b { font-weight: 700; }
+  .hero .btn { grid-column: 1 / -1; background: var(--ink); color: var(--melon); }
+
+  /* Los cuatro pilares */
+  .pilares { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pilar { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 8px; text-align: left; min-width: 0; }
+  .fila1 { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .pilar strong { font-size: 24px; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pilar strong small { font-size: 13px; color: var(--muted); font-weight: 500; letter-spacing: 0; }
+  .pilar p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.35; }
+  .chip { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+  .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 6px; }
+  .chip.bien { color: var(--bien); background: rgba(123,216,143,.12); }
+  .chip.ojo { color: var(--ojo); background: rgba(255,201,92,.12); }
+  .chip.mal { color: var(--mal); background: rgba(255,122,107,.12); }
+  .chip.nada { color: var(--muted); background: var(--track); }
+  .fases { display: flex; gap: 2px; height: 8px; }
+  .fases i { border-radius: 2px; display: block; min-width: 2px; }
+  .rango { position: relative; height: 8px; border-radius: 4px; background: var(--track); margin-block: 3px; }
+  .rango em { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: rgba(123,216,143,.35); }
+  .rango i { position: absolute; top: -3px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--text); border: 2px solid var(--surface); }
+  .pilar svg { display: block; width: 100%; height: 26px; }
+
+  /* Gráficas */
+  .grafica { position: relative; }
+  .grafica svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+  .grafica text { font: 500 10px var(--font); fill: var(--dim); }
+  .tip { position: absolute; top: -30px; pointer-events: none; background: var(--text); color: var(--ink); font-size: 12px; font-weight: 600; padding: 5px 8px; border-radius: 8px; white-space: nowrap; transform: translateX(-50%); font-variant-numeric: tabular-nums; z-index: 2; }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+  .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .leyenda i { width: 10px; height: 10px; border-radius: 3px; display: block; }
+
+  /* Ánimo */
+  .caras { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .cara { border: 0; background: var(--track); border-radius: 16px; padding: 10px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); font-weight: 600; transition: transform .15s ease, background .15s ease; }
+  .cara svg { width: 34px; height: 34px; }
+  .cara[aria-pressed="true"] { background: var(--melon); color: var(--ink); transform: translateY(-2px); }
+  .energia { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .energia button { border: 0; background: var(--track); border-radius: 10px; padding: 8px 0; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .energia button[aria-pressed="true"] { background: var(--ojo); color: var(--ink); }
+  .etiquetas { display: flex; flex-wrap: wrap; gap: 6px; }
+  .eti-b { border: 1px solid var(--track); background: none; border-radius: 999px; padding: 6px 12px; font-size: 13px; color: var(--muted); }
+  .eti-b[aria-pressed="true"] { border-color: var(--melon); color: var(--melon); background: rgba(95,217,195,.1); }
+  .campo { width: 100%; background: var(--bg); border: 1px solid var(--track); border-radius: 14px; padding: 11px 14px; font-size: 15px; }
+  .campo::placeholder { color: var(--dim); }
+  .hecho { display: flex; gap: 12px; align-items: center; }
+  .hecho svg { width: 40px; height: 40px; flex: 0 0 40px; }
+  .hecho p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.45; }
+  .hecho p b { color: var(--text); }
+
+  /* Consejos */
+  .consejos { display: flex; flex-direction: column; }
+  .consejo { display: grid; grid-template-columns: 54px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); align-items: start; }
+  .consejo time { font-size: 13px; font-weight: 700; color: var(--melon); font-variant-numeric: tabular-nums; padding-top: 2px; }
+  .consejo b { display: block; font-weight: 600; font-size: 15px; }
+  .consejo span { font-size: 13px; color: var(--muted); line-height: 1.45; }
+  .tranquilo { display: flex; gap: 12px; align-items: center; font-size: 14px; color: var(--muted); border: 1px dashed var(--track); border-radius: 18px; padding: 12px 14px; }
+  .tranquilo b { color: var(--bien); }
+
+  /* Mind */
+  .calendario { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .calendario span { font-size: 10px; color: var(--dim); text-align: center; font-weight: 600; }
+  .calendario i { aspect-ratio: 1; max-width: 100%; border-radius: 8px; display: block; background: var(--track); }
+  .calendario i.hoy { outline: 2px solid var(--text); outline-offset: 1px; }
+  .calendario i.fuera { background: none; }
+  .mueve { display: flex; flex-direction: column; gap: 10px; }
+  .mueve div { display: grid; grid-template-columns: minmax(0, 1fr) 110px 40px; gap: 10px; align-items: center; font-size: 14px; }
+  .mueve .barra { position: relative; height: 10px; }
+  .mueve .barra::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--dim); }
+  .mueve .barra em { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+  .mueve b { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+  .cruce { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; font-size: 14px; color: var(--muted); line-height: 1.45; padding: 10px 0; border-top: 1px solid var(--line); }
+  .cruce b { color: var(--text); }
+  .cruce .app-chip { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 8px; background: var(--track); color: var(--text); }
+  .diario { display: flex; flex-direction: column; }
+  .entrada { display: grid; grid-template-columns: 30px 1fr; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+  .entrada svg { width: 30px; height: 30px; }
+  .entrada p { margin: 0; font-size: 14px; line-height: 1.45; }
+  .entrada p + p { margin-top: 4px; color: var(--muted); }
+  .entrada small { display: block; color: var(--dim); font-size: 12px; margin-top: 2px; }
+  .respirar { display: flex; gap: 14px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 16px 18px; text-align: left; width: 100%; }
+  .respirar .bola { width: 44px; height: 44px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #9df0e0, var(--melon)); flex: 0 0 44px; }
+  .respirar b { display: block; font-size: 16px; }
+  .respirar span { font-size: 13px; color: var(--muted); }
+
+  /* Trends */
+  .segmento { display: flex; background: var(--surface); border-radius: 12px; padding: 3px; align-self: flex-start; }
+  .segmento button { border: 0; background: none; padding: 6px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .segmento button[aria-pressed="true"] { background: var(--track); color: var(--text); }
+  .cifras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; }
+  .cifra { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .cifra b { font-size: 26px; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .cifra span { font-size: 12px; color: var(--muted); }
+  .frases { margin: 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.45; color: var(--muted); }
+  .frases b { color: var(--text); font-weight: 600; }
+
+  nav { display: flex; border-top: 1px solid var(--line); padding: 8px max(12px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+  nav button { flex: 1; border: 0; background: none; padding: 8px 0; font-size: 13px; font-weight: 600; color: var(--dim); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  nav button svg { width: 22px; height: 22px; }
+  nav button[aria-selected="true"] { color: var(--melon); }
+
+  /* Hojas de abajo, respiración y avisos */
+  .velo { position: absolute; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; z-index: 5; }
+  .hoja { background: var(--surface); width: 100%; border-radius: 28px 28px 0 0; padding: 22px max(22px, env(safe-area-inset-right, 0px)) calc(26px + env(safe-area-inset-bottom, 0px)) max(22px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 14px; max-height: 88%; overflow-y: auto; animation: sube .25s ease; }
+  .hoja h3 { font-size: 22px; }
+  .hoja h4 { margin: 8px 0 0; font-size: 16px; }
+  .hoja p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .hoja p b { color: var(--text); font-weight: 600; }
+  .hoja ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; line-height: 1.55; display: flex; flex-direction: column; gap: 6px; }
+  .hoja ol b { color: var(--text); }
+  .hoja .cerrar { align-self: stretch; border: 0; border-radius: 14px; background: var(--track); padding: 12px; font-weight: 600; }
+  .hoja textarea { min-height: 220px; resize: vertical; font-size: 13px; line-height: 1.5; }
+  .linea-mas { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .linea-mas > span { color: var(--muted); min-width: 0; }
+  .linea-mas > span b { color: var(--text); display: block; font-weight: 600; }
+  .linea-mas input[type="time"], .linea-mas select { background: var(--bg); border: 1px solid var(--track); border-radius: 10px; padding: 6px 8px; font-size: 14px; }
+  .dias7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .dias7 button { border: 0; background: var(--track); border-radius: 10px; padding: 8px 0; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .dias7 button[aria-pressed="true"] { background: var(--melon); color: var(--ink); }
+  .codigo { font: 12px/1.4 ui-monospace, monospace; background: var(--bg); border: 1px solid var(--track); border-radius: 12px; padding: 10px; word-break: break-all; color: var(--muted); user-select: all; }
+  @keyframes sube { from { transform: translateY(30px); opacity: .4; } }
+  .respiracion { position: absolute; inset: 0; background: var(--bg); z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 24px; text-align: center; }
+  .respiracion .circulo { width: 200px; height: 200px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #9df0e0, var(--melon) 60%, #2a8f80); transform: scale(.55); transition: transform 4s ease-in-out; }
+  .respiracion h2 { margin: 0; font-size: 30px; letter-spacing: -.03em; }
+  .respiracion p { margin: 0; color: var(--muted); font-size: 15px; }
+  .toast { position: absolute; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); opacity: 0; pointer-events: none; background: var(--text); color: var(--ink); font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 14px; z-index: 7; max-width: 90%; text-align: center; transition: opacity .2s, transform .2s; }
+  .toast.ver { opacity: 1; transform: translate(-50%, 0); }
+
+  /* Pantalla de carga: la tajada de melón se balancea mientras llegan tus datos. */
+  .splash { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; transition: opacity .45s ease; }
+  .splash.fuera { opacity: 0; pointer-events: none; }
+  .splash .logo { width: 108px; height: 108px; border-radius: 28px; background: var(--melon); display: grid; place-items: center; transition: transform .45s ease; }
+  .splash.fuera .logo { transform: scale(1.15); }
+  .splash .logo svg { animation: balanceo 1.8s ease-in-out infinite; }
+  .splash .nombre { font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
+  .splash .frase { font-size: 14px; color: var(--muted); height: 20px; transition: opacity .25s; }
+  @keyframes balanceo { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="splash" id="splash" role="status" aria-label="Cargando">
+  <div class="logo" aria-hidden="true"><svg width="70" height="70" viewBox="0 0 24 24" fill="none" stroke="#0b0e0e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18a9 9 0 0 1-18 0z"/><path d="M6 9a6 6 0 0 0 12 0"/><circle cx="9" cy="12" r=".6" fill="#0b0e0e"/><circle cx="12" cy="13.5" r=".6" fill="#0b0e0e"/><circle cx="15" cy="12" r=".6" fill="#0b0e0e"/></svg></div>
+  <div class="nombre">Melon</div>
+  <div class="frase" id="frase">Leyendo tu reloj…</div>
+</div>
+<div class="app" id="app">
+  <div class="carga" id="carga"></div>
+  <header class="top">
+    <h1>Melon</h1>
+    <span id="fecha"></span>
+    <button class="redondo" id="btnRespirar" aria-label="Respirar 2 minutos">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3M3 12h7"/></svg>
+    </button>
+    <button class="redondo sec" id="btnMas" aria-label="Ajustes y conexiones">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+    </button>
+  </header>
+  <main id="main"></main>
+  <nav role="tablist" id="nav">
+    <button role="tab" data-tab="today" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Today</button>
+    <button role="tab" data-tab="mind" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M9 14.5c1.6 1.4 4.4 1.4 6 0M9.5 10h.01M14.5 10h.01"/></svg>Mind</button>
+    <button role="tab" data-tab="trends" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18l5-6 4 3 7-9"/></svg>Trends</button>
+  </nav>
+  <div class="toast" id="toast" role="status"></div>
+</div>
+
+<script>
+// <logica>
+const MELON = (() => {
+  const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const ANIMO = ['Fatal', 'Mal', 'Normal', 'Bien', 'Genial'];
+  const ENERGIA = ['Sin pilas', 'Floja', 'Normal', 'Con ganas', 'A tope'];
+  const ETIQUETAS = ['Tranquilo', 'Motivado', 'Contento', 'Cansado', 'Estresado', 'Ansioso', 'Triste', 'Con amigos', 'Con familia', 'Solo', 'Agobiado con la uni', 'Mucho trabajo', 'Enfermo'];
+  // Las de situación pueden explicar el ánimo; las de emoción solo lo describen (no se cruzan).
+  const SITUACIONES = ['Con amigos', 'Con familia', 'Solo', 'Agobiado con la uni', 'Mucho trabajo', 'Enfermo'];
+  const AJUSTES = {
+    despertar: ['08:30', '06:00', '06:00', '06:00', '06:00', '06:00', '08:30'], // domingo a sábado
+    meta: 450,          // minutos de sueño que quieres
+    uni: [2, 4],        // martes y jueves
+    avisos: true,
+  };
+
+  // ---------- Utilidades ----------
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const num = x => typeof x === 'number' && isFinite(x);
+  const media = a => { a = a.filter(num); return a.length ? a.reduce((s, x) => s + x, 0) / a.length : null; };
+  const mediana = a => {
+    a = a.filter(num).sort((x, y) => x - y);
+    if (!a.length) return null;
+    const m = a.length >> 1;
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  };
+  const percentil = (a, p) => {
+    a = a.filter(num).sort((x, y) => x - y);
+    if (!a.length) return null;
+    const i = (a.length - 1) * p, lo = Math.floor(i);
+    return a[lo] + (a[Math.min(lo + 1, a.length - 1)] - a[lo]) * (i - lo);
+  };
+  const r1 = x => Math.round(x * 10) / 10;
+  const coma = x => String(r1(x)).replace('.', ',');
+  const diaMas = (dia, n) => {
+    const p = dia.split('-').map(Number);
+    return new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)).toISOString().slice(0, 10);
+  };
+  const semanaDia = dia => new Date(dia + 'T12:00:00Z').getUTCDay();
+  const fechaCorta = dia => DIAS[semanaDia(dia)].slice(0, 3) + ' ' + Number(dia.slice(8));
+  // 465 → "7 h 45"; 40 → "40 min"
+  const hm = min => {
+    if (!num(min)) return '—';
+    min = Math.round(min);
+    const h = Math.floor(min / 60), m = min % 60;
+    return h ? h + ' h' + (m ? ' ' + String(m).padStart(2, '0') : '') : m + ' min';
+  };
+  const aMin = hora => { const p = String(hora || '').split(':').map(Number); return p.length === 2 && num(p[0]) ? p[0] * 60 + p[1] : null; };
+  const aHora = min => { min = ((Math.round(min) % 1440) + 1440) % 1440; return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0'); };
+  // La hora de acostarse cuenta desde las 18:00 para que las 23:30 y la 01:00 se puedan comparar.
+  const minNoche = hora => { const m = aMin(hora); return m == null ? null : (m < 18 * 60 ? m + 1440 : m); };
+  const ajustes = a => Object.assign({}, AJUSTES, a || {});
+  const plano = s => String(s).replace(/\*/g, '');
+  const ajustesDe = ajustes;
+
+  // ---------- Tu normal ----------
+  // Lo normal en ti: medianas de los 30 días anteriores (sin contar hoy).
+  function base(dias, hoy) {
+    const prev = dias.filter(d => d.dia < hoy && d.dia >= diaMas(hoy, -30));
+    const v = f => prev.map(f).filter(num);
+    const hrvs = prev.map(d => d.hrv).filter(h => h && num(h.n));
+    const ultimo = hrvs.slice().reverse().find(h => num(h.bajo) && num(h.alto));
+    const banda = ultimo ? [ultimo.bajo, ultimo.alto]
+      : hrvs.length >= 7 ? [Math.round(percentil(hrvs.map(h => h.n), .25)), Math.round(percentil(hrvs.map(h => h.n), .75))] : null;
+    return {
+      n: prev.length,
+      sueno: mediana(v(d => d.sueno && d.sueno.min)),
+      acostarse: mediana(v(d => d.sueno && minNoche(d.sueno.ini))),
+      reposo: mediana(v(d => d.reposo)),
+      resp: mediana(v(d => d.sueno && d.sueno.resp)),
+      spo2: mediana(v(d => d.sueno && d.sueno.spo2)),
+      estres: mediana(v(d => d.estres && d.estres.media)),
+      pasos: mediana(v(d => d.pasos)),
+      hrv: banda,
+    };
+  }
+
+  // ---------- Los cuatro pilares ----------
+  function pilares(d, b, aj, animo) {
+    aj = ajustes(aj);
+    const p = {};
+    const s = d.sueno;
+    if (s && num(s.min)) {
+      const v = .6 * clamp(s.min / aj.meta, 0, 1) + .4 * (num(s.pts) ? s.pts / 100 : clamp(s.min / aj.meta, 0, 1));
+      const corto = s.min < aj.meta - 45, malo = num(s.pts) && s.pts < 60;
+      p.sueno = {
+        v, valor: hm(s.min),
+        chip: malo ? ['Malo', 'mal'] : corto ? ['Corto', 'ojo'] : v >= .85 ? ['Bien', 'bien'] : ['Justo', 'ojo'],
+        texto: (num(s.pts) ? s.pts + ' puntos' : 'Sin puntos') + (num(s.prof) ? ' · ' + hm(s.prof) + ' de profundo' : ''),
+      };
+    }
+    const h = d.hrv;
+    if ((h && num(h.n)) || num(d.reposo)) {
+      let vh = null, chip = ['Recuperado', 'bien'];
+      if (h && num(h.n) && b.hrv) {
+        if (h.n < b.hrv[0]) { vh = clamp(1 - (b.hrv[0] - h.n) / 12, 0, 1); chip = h.n < b.hrv[0] - 4 ? ['Cansado', 'mal'] : ['Algo bajo', 'ojo']; }
+        else vh = h.n > b.hrv[1] ? .9 : 1;
+      } else if (h && num(h.n)) vh = .8;
+      const dr = num(d.reposo) && num(b.reposo) ? d.reposo - b.reposo : 0;
+      const vr = clamp(1 - Math.max(0, dr - 1) / 6, 0, 1);
+      if (dr >= 4 && chip[1] === 'bien') chip = ['Cargado', 'ojo'];
+      p.cuerpo = {
+        v: vh == null ? vr : .65 * vh + .35 * vr,
+        valor: h && num(h.n) ? h.n + ' ms' : d.reposo + ' ppm',
+        chip,
+        texto: num(d.reposo) ? 'Reposo ' + d.reposo + ' ppm' + (dr >= 2 ? ', ' + Math.round(dr) + ' más de lo normal' : ', lo normal') : 'Sin pulso en reposo',
+        hrv: h && num(h.n) ? h.n : null, banda: b.hrv,
+      };
+    }
+    const bt = d.bat;
+    if (bt && num(bt.ahora)) {
+      p.energia = {
+        v: clamp((num(bt.max) ? bt.max : bt.ahora) / 90, 0, 1), valor: bt.ahora,
+        chip: bt.ahora >= 50 ? ['Te queda', 'bien'] : bt.ahora >= 25 ? ['Justa', 'ojo'] : ['Baja', 'mal'],
+        texto: 'Body Battery' + (num(bt.max) ? ' · llegaste a ' + bt.max : ''),
+      };
+    }
+    const e = d.estres && num(d.estres.media) ? d.estres.media : null;
+    if (e != null || animo) {
+      const ve = e == null ? null : clamp((60 - e) / 35, 0, 1);
+      const va = animo ? (animo.animo - 1) / 4 : null;
+      p.mente = {
+        v: ve == null ? va : va == null ? ve : (ve + va) / 2,
+        valor: animo ? ANIMO[animo.animo - 1] : e,
+        chip: animo ? [ANIMO[animo.animo - 1], animo.animo >= 4 ? 'bien' : animo.animo === 3 ? 'nada' : animo.animo === 2 ? 'ojo' : 'mal']
+          : e <= 25 ? ['Tranquilo', 'bien'] : e <= 40 ? ['Normal', 'bien'] : e <= 50 ? ['Algo tenso', 'ojo'] : ['Estresado', 'mal'],
+        texto: e == null ? 'Sin estrés del reloj' : (animo ? 'Estrés medio ' + e : 'Falta tu ánimo de hoy'),
+        estres: e,
+      };
+    }
+    return p;
+  }
+
+  // ---------- Cómo estás hoy: nota y frase ----------
+  const PESOS = { sueno: .3, cuerpo: .35, energia: .2, mente: .15 };
+  function estado(d, b, aj, animo) {
+    aj = ajustes(aj);
+    const p = pilares(d, b, aj, animo);
+    const ks = Object.keys(p);
+    if (!ks.length) return { p: null, titulo: 'Aún no hay datos de hoy', texto: 'Sincroniza el reloj con Garmin Connect y vuelve a abrir Melon.', pilares: p, entreno: null };
+    const peso = ks.reduce((s, k) => s + PESOS[k], 0);
+    let nota = Math.round(100 * ks.reduce((s, k) => s + PESOS[k] * p[k].v, 0) / peso);
+    // Si dormiste poco o mal, no estás «a tope» aunque lo demás vaya bien.
+    if (p.sueno && p.sueno.chip[1] !== 'bien') nota = Math.min(nota, 79);
+    const flojo = ks.slice().sort((x, y) => p[x].v - p[y].v)[0];
+    const titulo = nota >= 80 ? 'Estás a tope'
+      : nota >= 65 ? (flojo === 'sueno' && p.sueno.v < .8 ? 'Recuperado, pero con poco sueño' : flojo === 'mente' && p.mente.v < .6 ? 'Bien de cuerpo, cargado de cabeza' : 'Estás bien')
+      : nota >= 50 ? 'Vas justo hoy' : 'Hoy toca cuidarse';
+    const f = [];
+    const s = d.sueno;
+    if (s && num(s.min)) {
+      const dif = num(b.sueno) ? s.min - b.sueno : 0;
+      f.push('Has dormido *' + hm(s.min) + '*' + (dif <= -25 ? ', ' + hm(-dif) + ' menos de lo que sueles.' : dif >= 25 ? ', ' + hm(dif) + ' más de lo que sueles.' : ', lo normal en ti.'));
+    }
+    if (p.cuerpo) {
+      const c = p.cuerpo.chip[1];
+      f.push(c === 'bien' ? 'Tu cuerpo se ha recuperado: la HRV está en tu rango y el pulso, normal.'
+        : p.cuerpo.chip[0] === 'Cargado' ? 'El pulso en reposo está más alto de lo normal: el cuerpo nota algo.'
+        : 'Tu HRV está por debajo de tu rango: el cuerpo aún nota el esfuerzo.');
+    }
+    if (p.energia && p.energia.chip[1] === 'mal') f.push('Te queda poca energía (' + d.bat.ahora + ').');
+    const entreno = nota >= 75 ? 'normal' : nota >= 55 ? 'suave' : 'descanso';
+    f.push(entreno === 'normal' ? 'Puedes entrenar con normalidad.' : entreno === 'suave' ? 'Puedes entrenar, pero sin buscar marcas.' : 'Mejor descansar o solo moverte suave.');
+    return { p: nota, titulo, texto: f.join(' '), pilares: p, entreno, flojo };
+  }
+
+  // ---------- A qué hora acostarte ----------
+  // Para levantarte mañana a tu hora con el sueño que quieres (o el que pide Garmin), más 15 min para dormirte.
+  function horaDormir(hoy, d, aj) {
+    aj = ajustes(aj);
+    const manana = diaMas(hoy, 1);
+    const despertar = aj.despertar[semanaDia(manana)];
+    const necesita = d && d.sueno && num(d.sueno.necesita) && d.sueno.necesita >= 360 ? Math.max(aj.meta, d.sueno.necesita) : aj.meta;
+    // Si anoche faltó sueño, se añade la mitad de lo que faltó (hasta 45 min).
+    const falta = d && d.sueno && num(d.sueno.min) ? clamp((aj.meta - d.sueno.min) / 2, 0, 45) : 0;
+    const total = necesita + falta;
+    return { hora: aHora(Math.floor((aMin(despertar) - total - 15) / 5) * 5), despertar, min: total };
+  }
+
+  // ---------- Señales de que te estás poniendo malo ----------
+  function resfriado(dias, b, hoy) {
+    const d = dias.find(x => x.dia === hoy);
+    if (!d || !num(b.reposo) || b.n < 10) return null;
+    const senales = [];
+    if (num(d.reposo) && d.reposo - b.reposo >= 4) senales.push('el pulso en reposo está ' + Math.round(d.reposo - b.reposo) + ' ppm más alto');
+    if (d.hrv && num(d.hrv.n) && b.hrv && d.hrv.n < b.hrv[0] - 3) senales.push('la HRV está por debajo de tu rango');
+    if (d.sueno && num(d.sueno.resp) && num(b.resp) && d.sueno.resp - b.resp >= 1.5) senales.push('respiras más rápido de noche');
+    if (d.sueno && num(d.sueno.spo2) && num(b.spo2) && b.spo2 - d.sueno.spo2 >= 3) senales.push('el oxígeno de la noche ha bajado');
+    if (!senales.length) return null;
+    const ayer = dias.find(x => x.dia === diaMas(hoy, -1));
+    const seguido = ayer && num(ayer.reposo) && ayer.reposo - b.reposo >= 4;
+    const nivel = senales.length >= 2 || (seguido && senales.length) ? 'alerta' : 'vigila';
+    const lista = senales.length > 1 ? senales.slice(0, -1).join(', ') + ' y ' + senales[senales.length - 1] : senales[0];
+    return {
+      nivel, senales,
+      texto: nivel === 'alerta'
+        ? 'Ojo: ' + lista + '. Suele pasar 1 o 2 días antes de un resfriado. Hoy, descanso, agua y a dormir pronto.'
+        : 'Una cosa rara: ' + lista + '. Puede ser cansancio. Si mañana sigue, Melon te avisa.',
+    };
+  }
+
+  // ---------- Rachas de ánimo bajo ----------
+  function rachaBaja(animos, hoy) {
+    const porDia = delDia(animos);
+    let n = 0, d = porDia[hoy] ? hoy : diaMas(hoy, -1);
+    while (porDia[d] && porDia[d].animo <= 2) { n++; d = diaMas(d, -1); }
+    if (n < 3) return null;
+    return {
+      dias: n,
+      texto: 'Llevas ' + n + ' días con el ánimo bajo. No hace falta arreglarlo todo hoy: sal a andar 20 minutos con luz, habla con alguien de confianza y acuéstate a tu hora. Si sigue así una o dos semanas, cuéntaselo a un médico o a un psicólogo: es lo normal y ayuda.',
+    };
+  }
+
+  // El registro del día (el último que apuntaste ese día), por fecha.
+  function delDia(animos) {
+    const o = {};
+    (animos || []).filter(a => a.tipo !== 'momento').forEach(a => { if (!o[a.dia] || a.cuando > o[a.dia].cuando) o[a.dia] = a; });
+    return o;
+  }
+
+  // Racha de días seguidos apuntando el ánimo (hoy cuenta si ya está; si no, desde ayer).
+  function rachaApuntar(animos, hoy) {
+    const o = delDia(animos);
+    let n = 0, d = o[hoy] ? hoy : diaMas(hoy, -1);
+    while (o[d]) { n++; d = diaMas(d, -1); }
+    return n;
+  }
+
+  // ---------- Pico de estrés ahora ----------
+  // intra = { dia, paso (min), estres: [valores por tramo desde las 00:00, null si no hay] }
+  function momentoEstres(intra, ahoraMin) {
+    if (!intra || !intra.estres) return null;
+    const paso = intra.paso || 15;
+    const hasta = Math.min(intra.estres.length, Math.floor(ahoraMin / paso) + 1);
+    const desde = Math.max(0, hasta - Math.round(120 / paso));
+    let altos = 0, max = 0, cuando = null;
+    for (let i = desde; i < hasta; i++) {
+      const v = intra.estres[i];
+      if (num(v) && v >= 60) { altos++; if (v > max) { max = v; cuando = i * paso; } }
+    }
+    if (altos * paso < 20) return null;
+    return { max, hora: aHora(cuando), texto: 'Tu estrés ha subido a ' + max + ' hacia las ' + aHora(cuando) + '. ¿Qué está pasando?' };
+  }
+
+  // ---------- Lo que mueve tu ánimo (o tu energía) ----------
+  // Diferencia de la media entre los días con y sin cada cosa. Solo sale si hay 4 días de cada lado.
+  function efectos(dias, animos, aj, campo) {
+    aj = ajustes(aj);
+    campo = campo || 'animo';
+    const reg = delDia(animos);
+    const filas = dias.filter(d => reg[d.dia] && num(reg[d.dia][campo])).map(d => ({ d, a: reg[d.dia] }));
+    const ext = (d, k) => d.ext && num(d.ext[k]) ? d.ext[k] : null;
+    const factores = [
+      ['Dormir ' + hm(aj.meta) + ' o más', x => x.d.sueno && num(x.d.sueno.min) ? x.d.sueno.min >= aj.meta : null],
+      ['Una hora o más de sueño profundo', x => x.d.sueno && num(x.d.sueno.prof) ? x.d.sueno.prof >= 60 : null],
+      ['Entrenar ese día', x => x.d.act ? x.d.act.length > 0 : null],
+      ['Más de 8.000 pasos', x => num(x.d.pasos) ? x.d.pasos > 8000 : null],
+      ['Estrés medio por encima de 35', x => x.d.estres && num(x.d.estres.media) ? x.d.estres.media > 35 : null],
+      ['Día de uni', x => aj.uni.indexOf(semanaDia(x.d.dia)) >= 0],
+      ['Estudiar 2 h o más', x => ext(x.d, 'estudio') == null ? null : ext(x.d, 'estudio') >= 120],
+      ['Examen en los próximos 3 días', x => x.d.ext && x.d.ext.examen != null ? !!x.d.ext.examen : null],
+      ['Beber 2 litros de agua', x => ext(x.d, 'agua') == null ? null : ext(x.d, 'agua') >= 2000],
+      ['Tomar la creatina', x => x.d.ext && x.d.ext.creatina != null ? !!x.d.ext.creatina : null],
+      ['Comer 120 g de proteína o más', x => ext(x.d, 'prot') == null ? null : ext(x.d, 'prot') >= 120],
+      ['Gastar más de 20 €', x => ext(x.d, 'gasto') == null ? null : ext(x.d, 'gasto') > 20],
+    ];
+    SITUACIONES.forEach(t => factores.push(['«' + t + '»', x => (x.a.etiquetas || []).indexOf(t) >= 0]));
+    const out = [];
+    factores.forEach(f => {
+      const si = [], no = [];
+      filas.forEach(x => { const c = f[1](x); if (c === true) si.push(x.a[campo]); else if (c === false) no.push(x.a[campo]); });
+      if (si.length >= 4 && no.length >= 4) out.push({ nombre: f[0], v: media(si) - media(no), n: si.length });
+    });
+    return out.filter(e => Math.abs(e.v) >= .15).sort((x, y) => Math.abs(y.v) - Math.abs(x.v)).slice(0, 7);
+  }
+
+  // ---------- Cruces con tus otras apps ----------
+  function cruces(dias, animos, aj) {
+    aj = ajustes(aj);
+    const reg = delDia(animos);
+    const out = [];
+    const est = d => d.estres && num(d.estres.media) ? d.estres.media : null;
+    const comparar = (cond, valor) => {
+      const si = [], no = [];
+      dias.forEach(d => { const c = cond(d), v = valor(d); if (v == null || c == null) return; (c ? si : no).push(v); });
+      return si.length >= 3 && no.length >= 3 ? { si: media(si), no: media(no), n: si.length } : null;
+    };
+    const ex = comparar(d => d.ext && d.ext.examen != null ? !!d.ext.examen : null, est);
+    if (ex) out.push({ app: 'Plum', texto: 'Con un examen a menos de 3 días tu estrés medio es *' + Math.round(ex.si) + '*; el resto de días, ' + Math.round(ex.no) + '.' });
+    const uni = comparar(d => aj.uni.indexOf(semanaDia(d.dia)) >= 0, est);
+    if (uni) out.push({ app: 'Plum', texto: 'Los días de uni tu estrés sube *' + Math.round(uni.si - uni.no) + ' puntos* (' + Math.round(uni.si) + ' contra ' + Math.round(uni.no) + ').' });
+    const gasto = comparar(d => reg[d.dia] ? (reg[d.dia].animo <= 2 ? true : reg[d.dia].animo >= 4 ? false : null) : null, d => d.ext && num(d.ext.gasto) ? d.ext.gasto : null);
+    if (gasto) out.push({ app: 'Lima', texto: 'Los días de ánimo bajo gastas *' + Math.round(gasto.si) + ' €* de media; los días buenos, ' + Math.round(gasto.no) + ' €.' });
+    const agua = comparar(d => d.ext && num(d.ext.agua) ? d.ext.agua >= 2000 : null, d => reg[d.dia] && num(reg[d.dia].energia) ? reg[d.dia].energia : null);
+    if (agua) out.push({ app: 'Cherry', texto: 'Los días que bebes 2 litros tu energía es *' + coma(agua.si) + '* sobre 5; si no, ' + coma(agua.no) + '.' });
+    const prot = comparar(d => d.ext && num(d.ext.prot) ? d.ext.prot >= 120 : null, d => { const n = dias.find(x => x.dia === diaMas(d.dia, 1)); return n && n.bat && num(n.bat.max) ? n.bat.max : null; });
+    if (prot) out.push({ app: 'Cherry', texto: 'Después de un día con 120 g de proteína o más te levantas con la batería a *' + Math.round(prot.si) + '*; si no, a ' + Math.round(prot.no) + '.' });
+    const rod = comparar(d => d.act ? d.act.some(a => a.t === 'run') : null, d => d.ext && num(d.ext.rodilla) ? d.ext.rodilla : null);
+    if (rod) out.push({ app: 'Tangerine', texto: 'Los días que corres la rodilla marca *' + coma(rod.si) + '* sobre 10; el resto, ' + coma(rod.no) + '.' });
+    return out;
+  }
+
+  // ---------- Qué te recomiendo hoy ----------
+  function consejos(hoy, d, b, aj, est, intra, ext, ahoraMin) {
+    aj = ajustes(aj);
+    const out = [];
+    const hd = horaDormir(hoy, d, aj);
+    out.push({ hora: hd.hora, titulo: 'A la cama a las ' + hd.hora, texto: 'Mañana te levantas a las ' + hd.despertar + '. Así duermes ' + hm(hd.min) + (hd.min > aj.meta ? ', un poco más para recuperar lo de anoche.' : '.') });
+    const t = ext && ext.tangerine && ext.tangerine.hoy;
+    const pasada = t && aMin(t.hora) != null && ahoraMin - aMin(t.hora) > 90;
+    if (t && t.clase !== 'off' && !t.hecho && pasada) {
+      out.push({ hora: t.hora, app: 'tangerine', titulo: t.titulo + ': aún sin hacer', texto: 'Era a las ' + t.hora + '. Si hoy ya no la vas a hacer, muévela en Tangerine.' });
+    } else if (t && t.clase !== 'off' && !t.hecho && est.entreno) {
+      out.push({
+        hora: t.hora || 'Hoy', app: 'tangerine',
+        titulo: t.titulo + (est.entreno === 'normal' ? ': a por ella' : est.entreno === 'suave' ? ': hazla suave' : ': mejor otro día'),
+        texto: est.entreno === 'normal' ? 'Llegas con el cuerpo recuperado.' : est.entreno === 'suave' ? 'Haz las series, pero deja 2 o 3 repeticiones en la recámara.' : 'Muévela en Tangerine o cámbiala por movilidad.',
+      });
+    } else if (est.entreno && !(d.act && d.act.length)) {
+      out.push({ hora: 'Hoy', titulo: est.entreno === 'normal' ? 'Buen día para entrenar fuerte' : est.entreno === 'suave' ? 'Si entrenas, que sea suave' : 'Hoy, descanso', texto: est.entreno === 'descanso' ? 'Un paseo de 20 minutos ayuda más que una sesión dura.' : 'Según cómo has dormido y tu HRV de esta noche.' });
+    }
+    if (intra && intra.estres) {
+      // A qué hora sueles tener el estrés más alto (tramo de la tarde de hoy hasta ahora).
+      const pico = momentoEstres(intra, ahoraMin);
+      if (pico) out.push({ hora: 'Ahora', titulo: '2 minutos de respirar', texto: 'Tu estrés ha subido a ' + pico.max + '. Respirar en caja lo baja en un par de minutos.', accion: 'respirar' });
+    }
+    if (num(d.pasos) && ahoraMin >= 17 * 60 && d.pasos < 6000) out.push({ hora: 'Tarde', titulo: 'Sal a andar 15 minutos', texto: 'Llevas ' + d.pasos.toLocaleString('es-ES') + ' pasos. Andar un poco te ayuda a dormir mejor.' });
+    return out;
+  }
+
+  // ---------- Tu semana, en frases ----------
+  function resumenSemana(dias, animos, hoy, aj) {
+    aj = ajustes(aj);
+    const sem = dias.filter(d => d.dia > diaMas(hoy, -7) && d.dia <= hoy);
+    const antes = dias.filter(d => d.dia > diaMas(hoy, -14) && d.dia <= diaMas(hoy, -7));
+    const reg = delDia(animos);
+    const f = [];
+    const s1 = media(sem.map(d => d.sueno && d.sueno.min)), s0 = media(antes.map(d => d.sueno && d.sueno.min));
+    if (s1 != null) f.push('Has dormido *' + hm(s1) + '* de media' + (s0 != null && Math.abs(s1 - s0) >= 10 ? ', ' + hm(Math.abs(s1 - s0)) + (s1 > s0 ? ' más' : ' menos') + ' que la semana anterior.' : ', como la semana anterior.'));
+    const h1 = media(sem.map(d => d.hrv && d.hrv.n));
+    const b = base(dias, hoy);
+    if (h1 != null) f.push('Tu HRV media es *' + Math.round(h1) + ' ms*' + (b.hrv ? (h1 < b.hrv[0] ? ', por debajo de tu rango: esta semana has ido cargado.' : ', dentro de tu rango: el cuerpo aguanta bien.') : '.'));
+    const an = sem.map(d => reg[d.dia]).filter(Boolean);
+    if (an.length) {
+      const mejor = sem.filter(d => reg[d.dia]).sort((x, y) => reg[y.dia].animo - reg[x.dia].animo || ((y.sueno && y.sueno.min) || 0) - ((x.sueno && x.sueno.min) || 0))[0];
+      f.push('Tu ánimo medio ha sido *' + coma(media(an.map(a => a.animo))) + '* sobre 5. El mejor día, el *' + fechaCorta(mejor.dia) + '*' + (mejor.sueno && num(mejor.sueno.min) ? ': dormiste ' + hm(mejor.sueno.min) : '') + (mejor.act && mejor.act.length ? ' y entrenaste.' : '.'));
+    }
+    const ent = sem.filter(d => d.act && d.act.length).length;
+    const pasos = media(sem.map(d => d.pasos));
+    if (ent || pasos) f.push('Has entrenado *' + ent + (ent === 1 ? ' día' : ' días') + '*' + (pasos ? ' y andado ' + Math.round(pasos).toLocaleString('es-ES') + ' pasos al día.' : '.'));
+    const e1 = media(sem.map(d => d.estres && d.estres.media));
+    if (e1 != null) {
+      const peor = sem.filter(d => d.estres && num(d.estres.media)).sort((x, y) => y.estres.media - x.estres.media)[0];
+      f.push('Estrés medio *' + Math.round(e1) + '*; el día más tenso fue el ' + fechaCorta(peor.dia) + ' (' + peor.estres.media + ').');
+    }
+    return f;
+  }
+
+  // ---------- Informe del mes ----------
+  function informeMes(dias, animos, mes) {
+    const del = dias.filter(d => d.dia.slice(0, 7) === mes);
+    const reg = delDia(animos);
+    const an = del.map(d => reg[d.dia]).filter(Boolean);
+    const m = MESES[Number(mes.slice(5)) - 1];
+    const l = ['Melon · ' + m + ' de ' + mes.slice(0, 4), ''];
+    const s = media(del.map(d => d.sueno && d.sueno.min));
+    if (s != null) l.push('Sueño: ' + hm(s) + ' de media, ' + Math.round(media(del.map(d => d.sueno && d.sueno.pts)) || 0) + ' puntos.');
+    const h = media(del.map(d => d.hrv && d.hrv.n));
+    if (h != null) l.push('HRV: ' + Math.round(h) + ' ms de media.');
+    const r = media(del.map(d => d.reposo));
+    if (r != null) l.push('Pulso en reposo: ' + Math.round(r) + ' ppm.');
+    const e = media(del.map(d => d.estres && d.estres.media));
+    if (e != null) l.push('Estrés medio: ' + Math.round(e) + '.');
+    const p = media(del.map(d => d.pasos));
+    if (p != null) l.push('Pasos: ' + Math.round(p).toLocaleString('es-ES') + ' al día.');
+    const ent = del.filter(d => d.act && d.act.length).length;
+    l.push('Días con entreno: ' + ent + '.');
+    const kg = del.filter(d => num(d.kg));
+    if (kg.length >= 2) l.push('Peso: de ' + coma(kg[0].kg) + ' a ' + coma(kg[kg.length - 1].kg) + ' kg.');
+    if (an.length) {
+      l.push('Ánimo: ' + coma(media(an.map(a => a.animo))) + ' sobre 5 en ' + an.length + ' días apuntados.');
+      const cuenta = {};
+      an.forEach(a => (a.etiquetas || []).forEach(t => { cuenta[t] = (cuenta[t] || 0) + 1; }));
+      const top = Object.keys(cuenta).sort((x, y) => cuenta[y] - cuenta[x]).slice(0, 3);
+      if (top.length) l.push('Lo que más has sentido: ' + top.map(t => t.toLowerCase() + ' (' + cuenta[t] + ')').join(', ') + '.');
+      const grat = an.filter(a => a.gratitud).map(a => a.gratitud);
+      if (grat.length) l.push('', 'Cosas buenas del mes:', ...grat.slice(-5).map(g => '· ' + g));
+    }
+    const ef = efectos(dias.filter(d => d.dia.slice(0, 7) <= mes), animos, null, 'animo');
+    if (ef.length) l.push('', 'Lo que más te ha subido el ánimo: ' + ef.filter(x => x.v > 0).slice(0, 2).map(x => x.nombre.toLowerCase()).join(' y ') + '.');
+    return l.join('\n');
+  }
+
+  // ---------- Aviso al móvil (el atajo lo pide a varias horas) ----------
+  // ctx = { hoy, ahoraMin, dias, animos, intra, ajustes, avisado: { estres: 'yyyy-mm-dd HH:MM' } }
+  function aviso(ctx) {
+    const aj = ajustes(ctx.ajustes);
+    if (!aj.avisos) return '';
+    const h = ctx.ahoraMin / 60;
+    const d = ctx.dias.find(x => x.dia === ctx.hoy) || { dia: ctx.hoy };
+    const b = base(ctx.dias, ctx.hoy);
+    const reg = delDia(ctx.animos);
+    if (h >= 7 && h < 12) {
+      const r = resfriado(ctx.dias, b, ctx.hoy);
+      if (r && r.nivel === 'alerta') return plano(r.texto);
+      const baja = rachaBaja(ctx.animos, diaMas(ctx.hoy, -1));
+      if (baja) return plano(baja.texto);
+      const e = estado(d, b, aj, reg[ctx.hoy]);
+      return e.p == null ? '' : e.p + ' · ' + e.titulo + '. ' + plano(e.texto);
+    }
+    if (h >= 12 && h < 20.5) {
+      const m = momentoEstres(ctx.intra, ctx.ahoraMin);
+      if (m && !ctx.estresAvisado) return m.texto + ' Apúntalo en Melon o respira 2 minutos.';
+      return '';
+    }
+    if (h >= 20.5) {
+      const hd = horaDormir(ctx.hoy, d, aj);
+      let t = 'A la cama a las ' + hd.hora + ' para dormir ' + hm(hd.min) + ' antes de las ' + hd.despertar + '.';
+      if (!reg[ctx.hoy]) t += ' Y apunta en Melon cómo ha ido el día.';
+      if (semanaDia(ctx.hoy) === 0) t = 'Tu semana: ' + resumenSemana(ctx.dias, ctx.animos, ctx.hoy, aj).map(plano).join(' ') + '\n' + t;
+      return t;
+    }
+    return '';
+  }
+
+  return {
+    DIAS, MESES, ANIMO, ENERGIA, ETIQUETAS, SITUACIONES, AJUSTES, ajustes: ajustesDe,
+    clamp, num, media, mediana, diaMas, semanaDia, fechaCorta, hm, aMin, aHora, minNoche, coma, plano,
+    base, pilares, estado, horaDormir, resfriado, rachaBaja, rachaApuntar, delDia, momentoEstres, efectos, cruces, consejos, resumenSemana, informeMes, aviso,
+  };
+})();
+// </logica>
+</script>
+<script>
+  // Servidor de Google con el que habla la app. Cada persona tiene el suyo:
+  // llega como ?api=ID&k=CLAVE la primera vez (QR de la instalación) y se recuerda.
+  const API = leerGuardado('api', v => /^[\w-]{20,}$/.test(v));
+  const K = leerGuardado('k', v => v.length >= 6);
+  const URL_API = API ? 'https://script.google.com/macros/s/' + API + '/exec' : '';
+  const DEMO = !URL_API;
+  const M = MELON;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Las frases de la lógica marcan lo importante con *asteriscos*.
+  const neg = s => esc(s).replace(/\*([^*]+)\*/g, '<b>$1</b>');
+  const nid = l => l + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 6);
+  const ahoraMin = () => { const f = new Date(); return f.getHours() * 60 + f.getMinutes(); };
+  const hoyLocal = () => new Date().toLocaleDateString('sv-SE');
+  const COLOR_ANIMO = ['#ff7a6b', '#f0a35e', '#93a19d', '#7bd0a0', '#5fd9c3'];
+  const APPS = [['tangerine', 'Tangerine', 'entrenos y rodilla'], ['plum', 'Plum', 'estudio y exámenes'], ['cherry', 'Cherry', 'comida, agua y creatina'], ['lima', 'Lima', 'gastos']];
+
+  function leerGuardado(nombre, valido) {
+    const q = new URLSearchParams(location.search).get(nombre) || '';
+    if (q && valido(q)) {
+      try { localStorage.setItem('melon.' + nombre, q); } catch (e) {}
+      return q;
+    }
+    try { return localStorage.getItem('melon.' + nombre) || ''; } catch (e) { return ''; }
+  }
+
+  // ---------- Estado ----------
+
+  let D = null;            // datos del servidor (más lo apuntado que aún no ha llegado)
+  let vista = 'today';
+  let cola = [];
+  let ocupado = false;
+  let rango = 30;          // días de Trends
+  let campoMind = 'animo'; // ánimo o energía en Mind
+  let borrador = null;     // el registro de ánimo que se está escribiendo
+  let momento = null;      // el registro rápido de un pico de estrés
+  try { vista = localStorage.getItem('melon.vista') || 'today'; } catch (e) {}
+  if (['today', 'mind', 'trends'].indexOf(location.hash.slice(1)) >= 0) vista = location.hash.slice(1);
+  if (['today', 'mind', 'trends'].indexOf(vista) < 0) vista = 'today';
+  try { cola = JSON.parse(localStorage.getItem('melon.cola') || '[]'); } catch (e) {}
+  try { rango = Number(localStorage.getItem('melon.rango')) || 30; } catch (e) {}
+
+  // ---------- Servidor ----------
+
+  // text/plain evita la comprobación previa del navegador, que el servidor de Google no contesta.
+  async function llamar(que, d) {
+    let r;
+    try {
+      r = que === 'datos'
+        ? await fetch(URL_API + '?accion=datos&k=' + encodeURIComponent(K))
+        : que === 'scriptable'
+          ? await fetch(URL_API + '?accion=scriptable&k=' + encodeURIComponent(K))
+          : await fetch(URL_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ api: 'accion', k: K, que, d }) });
+    } catch (e) {
+      const err = new Error('Sin conexión');
+      err.red = true;
+      throw err;
+    }
+    if (que === 'scriptable') return r.text();
+    let j;
+    try { j = await r.json(); } catch (e) { const err = new Error('El servidor no ha contestado bien'); err.red = true; throw err; }
+    if (j && j.error) throw new Error(j.error);
+    return j;
+  }
+
+  async function cargar() {
+    if (DEMO) { D = demo(); pintar(); quitarSplash(); return; }
+    cargando(true);
+    try {
+      const r = await llamar('datos');
+      if (!cola.length) { D = r; guardarCache(); pintar(); }
+    } catch (e) {
+      if (/clave/i.test(e.message)) pantallaClave(e.message);
+      else if (!D) $('main').innerHTML = `<div class="tarjeta"><p><b>No se han podido cargar tus datos.</b> ${esc(e.message)}.</p><button class="btn sec" data-act="recargar">Probar otra vez</button></div>`;
+      else avisar(e.red ? 'Sin conexión: enseño lo último que tenía' : 'Error: ' + e.message);
+    }
+    quitarSplash();
+    cargando(false);
+  }
+
+  // Escribe: primero en pantalla (al instante) y luego en la hoja, de una en una y en orden.
+  function enviar(que, d) {
+    local(que, d);
+    pintar();
+    if (DEMO) return;
+    cola.push({ que, d });
+    guardarCola();
+    guardarCache();
+    vaciar();
+  }
+  async function vaciar() {
+    if (ocupado || !cola.length || DEMO) return;
+    ocupado = true;
+    cargando(true);
+    while (cola.length) {
+      try {
+        const r = await llamar(cola[0].que, cola[0].d);
+        cola.shift();
+        guardarCola();
+        if (!cola.length && r.datos) { D = r.datos; guardarCache(); repintar(); }
+      } catch (e) {
+        if (e.red) { avisar('Sin conexión: se guardará al volver la red'); break; }
+        cola.shift();
+        guardarCola();
+        avisar('No se ha guardado: ' + e.message);
+      }
+    }
+    ocupado = false;
+    cargando(false);
+  }
+  addEventListener('online', vaciar);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !D) return;
+    if (cola.length) return vaciar();
+    cargar();
+  });
+
+  // Lo mismo que hará el servidor, aplicado ya en pantalla.
+  function local(que, d) {
+    if (!D) return;
+    if (que === 'animo') {
+      D.animos = D.animos.filter(a => a.id !== d.id && !(d.tipo === 'dia' && a.tipo === 'dia' && a.dia === d.dia));
+      D.animos.push(Object.assign({}, d));
+    }
+    if (que === 'borrarAnimo') D.animos = D.animos.filter(a => a.id !== d.id);
+    if (que === 'ajustes') Object.assign(D.ajustes, d);
+  }
+
+  function guardarCache() { try { localStorage.setItem('melon.cache', JSON.stringify(D)); } catch (e) {} }
+  function leerCache() { try { return JSON.parse(localStorage.getItem('melon.cache') || 'null'); } catch (e) { return null; } }
+  function guardarCola() { try { localStorage.setItem('melon.cola', JSON.stringify(cola)); } catch (e) {} }
+  function cargando(si) { $('carga').classList.toggle('ver', si); }
+
+  // ---------- Pantalla de carga ----------
+
+  const SPLASH_DESDE = Date.now();
+  const FRASES = ['Leyendo tu reloj…', 'Contando tus horas de sueño…', 'Mirando tu HRV…', 'Cargando la batería…', 'Casi está…'];
+  let nFrase = 0;
+  const cambiarFrase = setInterval(() => {
+    const f = $('frase');
+    if (!f) return clearInterval(cambiarFrase);
+    f.style.opacity = 0;
+    setTimeout(() => { nFrase = (nFrase + 1) % FRASES.length; f.textContent = FRASES[nFrase]; f.style.opacity = 1; }, 250);
+  }, 1300);
+  function quitarSplash() {
+    const s = $('splash');
+    if (!s || s.classList.contains('fuera')) return;
+    setTimeout(() => {
+      s.classList.add('fuera');
+      clearInterval(cambiarFrase);
+      setTimeout(() => s.remove(), 500);
+    }, Math.max(0, 700 - (Date.now() - SPLASH_DESDE)));
+  }
+
+  function pantallaClave(error) {
+    quitarSplash();
+    $('nav').hidden = true;
+    $('main').innerHTML = `<form class="tarjeta" id="formClave" autocomplete="off">
+        <p>${error ? esc(error) + '. ' : ''}Escribe tu clave para entrar (solo la primera vez).</p>
+        <input class="campo" id="clave" placeholder="Clave" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <button class="btn">Entrar</button></form>`;
+    $('formClave').onsubmit = e => {
+      e.preventDefault();
+      try { localStorage.setItem('melon.k', $('clave').value.trim()); } catch (err) {}
+      location.reload();
+    };
+  }
+
+  // ---------- Pintar ----------
+
+  const dia = d => D.dias.find(x => x.dia === d) || { dia: d };
+  function pintar() {
+    if (!D) return;
+    $('nav').hidden = false;
+    const f = new Date(D.hoy + 'T12:00:00');
+    $('fecha').textContent = M.DIAS[f.getDay()].slice(0, 3) + ' ' + f.getDate() + ' ' + M.MESES[f.getMonth()].slice(0, 3);
+    document.querySelectorAll('nav button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === vista));
+    ({ today: vistaToday, mind: vistaMind, trends: vistaTrends })[vista]();
+  }
+  // Repinta sin perder lo que se está escribiendo ni el sitio del scroll.
+  function repintar() {
+    const top = $('main').scrollTop;
+    pintar();
+    $('main').scrollTop = top;
+  }
+  function ir(tab) {
+    vista = tab;
+    try { localStorage.setItem('melon.vista', tab); } catch (e) {}
+    pintar();
+    $('main').scrollTop = 0;
+  }
+
+  // ---------- Dibujos ----------
+
+  function cara(n, color) {
+    const boca = [-5, -2.5, 0, 3, 5.5][n - 1];
+    const fondo = color === 'currentColor' ? 'var(--surface)' : '#0b0e0e';
+    return '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15" fill="' + color + '"/>' +
+      '<circle cx="12" cy="14" r="1.8" fill="' + fondo + '"/><circle cx="22" cy="14" r="1.8" fill="' + fondo + '"/>' +
+      '<path d="M11 ' + (22 - boca / 3) + ' Q17 ' + (22 + boca) + ' 23 ' + (22 - boca / 3) + '" stroke="' + fondo + '" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>';
+  }
+  const chip = c => c ? `<span class="chip ${c[1]}">${esc(c[0])}</span>` : '<span class="chip nada">Sin datos</span>';
+  const fasesBar = s => [['profundo', s.prof], ['ligero', s.lig], ['rem', s.rem], ['despierto', s.desp]]
+    .filter(x => M.num(x[1]) && x[1] > 0).map(x => `<i style="flex:${x[1]};background:var(--${x[0]})"></i>`).join('');
+
+  // Gráfica de líneas o barras con una sola escala; null = hueco. tip(i) da el texto al pasar el dedo.
+  function grafica({ valores, min, max, tipo = 'linea', banda, meta, etiquetas, color = 'var(--melon)', tip, alto = 130, extra = '', unir = false }) {
+    const W = 340, H = alto, izq = 30, der = 8, arr = 10, abj = 20;
+    const n = valores.length, ancho = W - izq - der, altoUtil = H - arr - abj;
+    if (min == null || max == null) {
+      // Escala con números redondos (1, 2, 5, 10…) y la marca del medio también redonda.
+      const v = valores.filter(M.num);
+      const lo = min != null ? min : Math.min.apply(null, v.concat(banda || [])), hi = Math.max.apply(null, v.concat(banda || []).concat(meta != null ? [meta] : []));
+      const bruto = Math.max(1, (hi - lo) * 1.3) / 4;
+      const pot = Math.pow(10, Math.floor(Math.log10(bruto)));
+      const u = [1, 2, 5, 10].map(x => x * pot).find(x => x >= bruto);
+      min = min != null ? min : Math.floor((lo - (hi - lo) * .15) / u) * u;
+      max = max != null ? max : Math.ceil((hi + (hi - lo) * .15) / u) * u;
+      if (Math.round((max - min) / u) % 2) max += u;
+    }
+    const x = i => izq + (tipo === 'barras' ? (i + .5) * ancho / n : (n === 1 ? ancho / 2 : i * ancho / (n - 1)));
+    const y = v => arr + altoUtil * (1 - (v - min) / (max - min));
+    const r = v => Math.round(v * 10) / 10;
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+    [min, (min + max) / 2, max].forEach(t => { s += `<line x1="${izq}" x2="${W - der}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="1"/><text x="${izq - 6}" y="${y(t) + 3}" text-anchor="end">${r(t).toLocaleString('es-ES')}</text>`; });
+    if (banda) s += `<rect x="${izq}" width="${ancho}" y="${y(banda[1])}" height="${Math.max(0, y(banda[0]) - y(banda[1]))}" fill="rgba(123,216,143,.10)"/>`;
+    if (tipo === 'barras') {
+      const bw = Math.max(2, ancho / n - (n > 60 ? 1 : 2));
+      valores.forEach((v, i) => {
+        if (!M.num(v)) return;
+        const top = y(Math.max(min, v)), base = y(min), rr = Math.min(3, bw / 2, (base - top) / 2);
+        const c = typeof color === 'function' ? color(v, i) : color;
+        s += `<path d="M${x(i) - bw / 2} ${base}V${top + rr}Q${x(i) - bw / 2} ${top} ${x(i) - bw / 2 + rr} ${top}H${x(i) + bw / 2 - rr}Q${x(i) + bw / 2} ${top} ${x(i) + bw / 2} ${top + rr}V${base}Z" fill="${c}"/>`;
+      });
+    } else {
+      // Tramos seguidos sin huecos.
+      let tramo = [];
+      const tramos = [];
+      valores.forEach((v, i) => { if (M.num(v)) tramo.push([x(i), y(v)]); else if (tramo.length && !unir) { tramos.push(tramo); tramo = []; } });
+      if (tramo.length) tramos.push(tramo);
+      tramos.forEach(t => {
+        const pts = t.map(p => p.join(',')).join(' ');
+        if (t.length > 1) s += `<polygon points="${t[0][0]},${y(min)} ${pts} ${t[t.length - 1][0]},${y(min)}" fill="${color}" opacity=".12"/><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+        else s += `<circle cx="${t[0][0]}" cy="${t[0][1]}" r="3" fill="${color}"/>`;
+      });
+      const ult = valores.map((v, i) => [v, i]).filter(p => M.num(p[0])).pop();
+      if (ult) s += `<circle cx="${x(ult[1])}" cy="${y(ult[0])}" r="4.5" fill="${color}" stroke="var(--bg)" stroke-width="2"/>`;
+    }
+    if (meta != null) s += `<line x1="${izq}" x2="${W - der}" y1="${y(meta)}" y2="${y(meta)}" stroke="var(--text)" stroke-width="1.2" stroke-dasharray="3 4" opacity=".6"/>`;
+    s += typeof extra === 'function' ? extra(x, y) : extra;
+    (etiquetas || []).forEach(e => { s += `<text x="${x(e[0])}" y="${H - 5}" text-anchor="middle">${esc(e[1])}</text>`; });
+    s += `<line class="cruz" x1="0" x2="0" y1="${arr}" y2="${y(min)}" stroke="var(--text)" stroke-width="1" opacity="0"/>`;
+    s += `<rect x="${izq}" y="0" width="${ancho}" height="${H}" fill="transparent"/></svg>`;
+    const div = document.createElement('div');
+    div.className = 'grafica';
+    div.innerHTML = s + '<div class="tip" hidden></div>';
+    const svg = div.querySelector('svg'), cruz = div.querySelector('.cruz'), caja = div.querySelector('.tip');
+    const mover = e => {
+      const rc = svg.getBoundingClientRect();
+      const px = (e.clientX - rc.left) * W / rc.width;
+      const i = Math.max(0, Math.min(n - 1, Math.round(tipo === 'barras' ? (px - izq) / (ancho / n) - .5 : (px - izq) / (ancho / Math.max(1, n - 1)))));
+      const t = tip(i);
+      if (!t) { caja.hidden = true; cruz.setAttribute('opacity', '0'); return; }
+      cruz.setAttribute('x1', x(i)); cruz.setAttribute('x2', x(i)); cruz.setAttribute('opacity', '.35');
+      caja.hidden = false; caja.textContent = t;
+      caja.style.left = Math.max(60, Math.min(rc.width - 60, x(i) * rc.width / W)) + 'px';
+    };
+    svg.addEventListener('pointermove', mover);
+    svg.addEventListener('pointerdown', mover);
+    svg.addEventListener('pointerleave', () => { caja.hidden = true; cruz.setAttribute('opacity', '0'); });
+    return div;
+  }
+
+  // Etiquetas de fecha repartidas a lo largo del eje.
+  function etiquetasFecha(ds) {
+    const paso = Math.max(1, Math.round(ds.length / 5));
+    const out = [];
+    for (let i = 0; i < ds.length; i += paso) out.push([i, String(Number(ds[i].dia.slice(8)))]);
+    if (ds.length - 1 - out[out.length - 1][0] >= paso / 2) out.push([ds.length - 1, String(Number(ds[ds.length - 1].dia.slice(8)))]);
+    return out;
+  }
+
+  // ---------- Today ----------
+
+  function vistaToday() {
+    const hoy = D.hoy, d = dia(hoy), b = M.base(D.dias, hoy), aj = D.ajustes, reg = M.delDia(D.animos);
+    const e = M.estado(d, b, aj, reg[hoy]);
+    const ahora = ahoraMin();
+    const intra = D.intra && D.intra.dia === hoy ? D.intra : null;
+    const rf = M.resfriado(D.dias, b, hoy);
+    const rb = M.rachaBaja(D.animos, hoy);
+    const circ = 2 * Math.PI * 40;
+    const p = e.pilares;
+    let h = '';
+    if (DEMO) h += `<div class="demo">Datos de ejemplo. Para ver los tuyos, <a href="https://hidegalaxy.github.io/melon/instalar.html" target="_blank" rel="noopener">instala tu servidor</a> y conecta tu Garmin.</div>`;
+    if (rf && rf.nivel === 'alerta') h += `<section class="tarjeta mal"><span class="eti">Ojo con un resfriado</span><p>${neg(rf.texto)}</p></section>`;
+    if (rb) h += `<section class="tarjeta ojo"><span class="eti">${rb.dias} días con el ánimo bajo</span><p>${neg(rb.texto)}</p><button class="btn sec" data-act="respirar">Respirar 2 minutos</button></section>`;
+
+    h += `<section class="hero">
+      <span class="eti">Cómo estás hoy</span>
+      ${e.p == null ? '' : `<div class="anillo"><svg viewBox="0 0 92 92"><circle cx="46" cy="46" r="40" fill="none" stroke="rgba(11,14,14,.15)" stroke-width="9"/><circle cx="46" cy="46" r="40" fill="none" stroke="#0b0e0e" stroke-width="9" stroke-linecap="round" stroke-dasharray="${circ * e.p / 100} ${circ}"/></svg><div><span><b>${e.p}</b><small>DE 100</small></span></div></div>`}
+      <h2 style="${e.p == null ? 'grid-column:1/-1' : ''}">${esc(e.titulo)}</h2>
+      <p>${neg(e.texto)}</p>
+      ${!D.garmin.conectado ? '<button class="btn" data-act="mas">Conectar Garmin</button>' : ''}
+    </section>`;
+
+    const sp = intra ? intra.bateria.filter(M.num) : [];
+    const spPts = sp.map((v, i) => (i * 100 / Math.max(1, sp.length - 1)) + ',' + (24 - v / 100 * 22)).join(' ');
+    const lo = b.hrv ? b.hrv[0] - 15 : 30, hi = b.hrv ? b.hrv[1] + 15 : 90;
+    const pos = v => M.clamp((v - lo) / (hi - lo) * 100, 0, 100);
+    h += `<section class="pilares">
+      <button class="pilar" data-hoja="sueno">
+        <div class="fila1"><span class="eti">Sueño</span>${chip(p.sueno && p.sueno.chip)}</div>
+        <strong class="num">${p.sueno ? esc(p.sueno.valor).replace(' h', '<small> h</small>') : '—'}</strong>
+        ${d.sueno ? `<div class="fases">${fasesBar(d.sueno)}</div>` : ''}
+        <p>${p.sueno ? esc(p.sueno.texto) : 'Sin datos de anoche'}</p>
+      </button>
+      <button class="pilar" data-hoja="cuerpo">
+        <div class="fila1"><span class="eti">Cuerpo</span>${chip(p.cuerpo && p.cuerpo.chip)}</div>
+        <strong class="num">${p.cuerpo && p.cuerpo.hrv ? p.cuerpo.hrv + '<small> ms HRV</small>' : p.cuerpo ? esc(p.cuerpo.valor) : '—'}</strong>
+        ${p.cuerpo && p.cuerpo.hrv && b.hrv ? `<div class="rango"><em style="left:${pos(b.hrv[0])}%;right:${100 - pos(b.hrv[1])}%"></em><i style="left:${pos(p.cuerpo.hrv)}%"></i></div>` : ''}
+        <p>${p.cuerpo ? esc(p.cuerpo.texto) : 'Sin HRV de anoche'}</p>
+      </button>
+      <button class="pilar" data-hoja="energia">
+        <div class="fila1"><span class="eti">Energía</span>${chip(p.energia && p.energia.chip)}</div>
+        <strong class="num">${p.energia ? p.energia.valor + '<small> /100</small>' : '—'}</strong>
+        ${sp.length > 1 ? `<svg viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><polyline points="${spPts}" fill="none" stroke="var(--melon)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>` : ''}
+        <p>${p.energia ? esc(p.energia.texto) : 'Sin Body Battery'}</p>
+      </button>
+      <button class="pilar" data-hoja="mente">
+        <div class="fila1"><span class="eti">Mente</span>${chip(p.mente && p.mente.chip)}</div>
+        <strong class="num">${p.mente ? (reg[hoy] ? esc(p.mente.valor) : p.mente.valor + '<small> estrés</small>') : '—'}</strong>
+        <p>${p.mente ? esc(p.mente.texto) + (reg[hoy] ? '' : ' ↓') : 'Apunta tu ánimo ↓'}</p>
+      </button>
+    </section>`;
+
+    const pico = M.momentoEstres(intra, ahora);
+    const yaMomento = D.animos.some(a => a.tipo === 'momento' && Date.now() - new Date(a.cuando).getTime() < 2 * 3600000);
+    if (pico && !yaMomento) h += `<section class="tarjeta ojo" id="momento"></section>`;
+
+    if (intra && intra.bateria.some(M.num)) h += `<section class="bloque"><header><h3>Tu energía hoy</h3><span class="eti">Batería y estrés</span></header><div id="gHoy"></div>
+      <div class="leyenda"><span><i style="background:var(--melon)"></i>Body Battery</span><span><i style="background:var(--ojo)"></i>Estrés</span></div>
+      ${d.bat && M.num(d.bat.carga) ? `<p class="nota">Dormir te cargó <b>+${d.bat.carga}</b> y hoy llevas gastados <b>${d.bat.gasto || 0}</b>. ${intra.max != null ? 'El estrés más alto ha sido ' + intra.max + '.' : ''}</p>` : ''}</section>`;
+
+    h += `<section class="tarjeta" id="animo"></section>`;
+
+    const cs = M.consejos(hoy, d, b, aj, e, intra, D.ext, ahora);
+    if (cs.length) h += `<section class="bloque"><header><h3>Qué te recomiendo</h3></header><div class="consejos">${cs.map(c => `
+      <div class="consejo"><time>${esc(c.hora)}</time><div><b>${esc(c.titulo)}</b><span>${esc(c.texto)}
+      ${c.accion === 'respirar' ? ' <button class="enlace" data-act="respirar">Empezar</button>' : ''}
+      ${c.app === 'tangerine' ? ' <a class="enlace" href="https://hidegalaxy.github.io/tangerine/" target="_blank" rel="noopener">Abrir Tangerine</a>' : ''}</span></div></div>`).join('')}</div></section>`;
+
+    if (d.act && d.act.length) h += `<section class="bloque"><header><h3>Entrenos de hoy</h3><span class="eti">Garmin</span></header><div class="consejos">${d.act.map(a => `<div class="consejo"><time>${esc(a.h)}</time><div><b>${esc(a.n || 'Entreno')}</b><span>${a.min} min${a.carga ? ' · carga ' + a.carga : ''}</span></div></div>`).join('')}</div></section>`;
+
+    if (rf && rf.nivel === 'vigila') h += `<section class="tarjeta ojo"><span class="eti">Algo a vigilar</span><p>${neg(rf.texto)}</p></section>`;
+    else if (!rf && b.n >= 10) h += `<div class="tranquilo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--bien)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg><span><b>Sin señales de resfriado.</b> Pulso, HRV y respiración de la noche, normales.</span></div>`;
+
+    h += pieGarmin();
+    $('main').innerHTML = h;
+    if ($('gHoy')) $('gHoy').appendChild(graficaHoy(intra));
+    pintarAnimo();
+    if ($('momento')) pintarMomento(pico);
+  }
+
+  function pieGarmin() {
+    if (DEMO) return '';
+    const g = D.garmin;
+    if (!g.conectado) return '';
+    const cuando = g.cuando ? new Date(g.cuando).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '—';
+    return `<div class="pie">${g.ok === false ? 'Garmin: ' + esc(g.error) : 'Garmin al día a las ' + cuando} · <button class="enlace" data-act="actualizar">Actualizar</button></div>`;
+  }
+
+  // Batería (línea) y estrés (barras) de hoy, en la misma escala de 0 a 100.
+  function graficaHoy(intra) {
+    const paso = intra.paso || 15, n = intra.bateria.length;
+    const hasta = Math.min(n, Math.floor(ahoraMin() / paso) + 1);
+    const bat = intra.bateria.map((v, i) => (i < hasta ? v : null));
+    const hora = i => M.aHora(i * paso);
+    return grafica({
+      valores: bat, min: 0, max: 100, alto: 140,
+      etiquetas: [[0, '0 h'], [24, '6 h'], [48, '12 h'], [72, '18 h'], [95, '24 h']].map(e => [e[0] * 15 / paso, e[1]]),
+      extra: (x, y) => intra.estres.map((v, i) => i < hasta && M.num(v) && v > 0 ? `<rect x="${x(i) - 1}" width="2" y="${y(v * .35)}" height="${y(0) - y(v * .35)}" fill="${v >= 60 ? 'var(--mal)' : v >= 40 ? 'var(--ojo)' : 'var(--dim)'}" opacity=".8"/>` : '').join(''),
+      tip: i => i >= hasta ? '' : hora(i) + ' · batería ' + (M.num(bat[i]) ? bat[i] : '—') + (M.num(intra.estres[i]) ? ' · estrés ' + intra.estres[i] : ''),
+    });
+  }
+
+  function pintarAnimo() {
+    const caja = $('animo');
+    if (!caja) return;
+    const hoy = D.hoy, reg = M.delDia(D.animos)[hoy];
+    if (reg && !borrador) {
+      const racha = M.rachaApuntar(D.animos, hoy);
+      caja.innerHTML = `<div class="hecho">${cara(reg.animo, COLOR_ANIMO[reg.animo - 1])}
+        <p><b>Hoy: ${esc(M.ANIMO[reg.animo - 1].toLowerCase())}${reg.energia ? ', energía ' + esc(M.ENERGIA[reg.energia - 1].toLowerCase()) : ''}.</b>
+        ${racha > 1 ? 'Llevas ' + racha + ' días seguidos apuntando.' : 'Mañana, otra vez: con 2 semanas ya verás qué te sube el ánimo.'}
+        ${reg.gratitud ? '<br>Lo bueno de hoy: ' + esc(reg.gratitud) : ''}</p></div>
+        <button class="enlace" data-act="cambiarAnimo" style="align-self:flex-start">Cambiar</button>`;
+      return;
+    }
+    const b = borrador = borrador || { animo: null, energia: null, etiquetas: [], linea: '', gratitud: '' };
+    caja.innerHTML = `
+      <div class="fila1"><h3>¿Cómo te sientes?</h3><span class="eti">10 segundos</span></div>
+      <div class="caras">${[1, 2, 3, 4, 5].map(n => `<button class="cara" data-animo="${n}" aria-pressed="${b.animo === n}">${cara(n, 'currentColor')}${M.ANIMO[n - 1]}</button>`).join('')}</div>
+      <span class="eti">Energía</span>
+      <div class="energia">${[1, 2, 3, 4, 5].map(n => `<button data-energia="${n}" aria-pressed="${b.energia === n}">${M.ENERGIA[n - 1]}</button>`).join('')}</div>
+      <div class="etiquetas">${M.ETIQUETAS.map(t => `<button class="eti-b" data-etiqueta="${esc(t)}" aria-pressed="${b.etiquetas.indexOf(t) >= 0}">${esc(t)}</button>`).join('')}</div>
+      <input class="campo" id="linea" maxlength="280" placeholder="Una línea sobre tu día (opcional)" value="${esc(b.linea)}">
+      <input class="campo" id="gratitud" maxlength="280" placeholder="Una cosa buena de hoy (opcional)" value="${esc(b.gratitud)}">
+      <button class="btn" data-act="guardarAnimo" ${b.animo ? '' : 'disabled'}>Guardar</button>`;
+    $('linea').oninput = ev => { b.linea = ev.target.value; };
+    $('gratitud').oninput = ev => { b.gratitud = ev.target.value; };
+  }
+
+  function pintarMomento(pico) {
+    const caja = $('momento');
+    if (!caja || !pico) return;
+    const m = momento = momento || { animo: null, etiquetas: [] };
+    caja.innerHTML = `<span class="eti">Pico de estrés · ${esc(pico.hora)}</span>
+      <p>${esc(pico.texto)} Apúntalo en un toque: así verás qué te lo sube.</p>
+      <div class="caras">${[1, 2, 3, 4, 5].map(n => `<button class="cara" data-momento="${n}" aria-pressed="${m.animo === n}">${cara(n, 'currentColor')}${M.ANIMO[n - 1]}</button>`).join('')}</div>
+      <div class="etiquetas">${['Uni', 'Trabajo', 'Examen', 'Tráfico', 'Discusión', 'Entreno', 'Nada en especial'].map(t => `<button class="eti-b" data-mom-eti="${t}" aria-pressed="${m.etiquetas.indexOf(t) >= 0}">${t}</button>`).join('')}</div>
+      <div class="fila1"><button class="btn" data-act="guardarMomento" ${m.animo ? '' : 'disabled'}>Guardar</button><button class="enlace" data-act="respirar">Respirar 2 minutos</button></div>`;
+  }
+
+  // ---------- Mind ----------
+
+  function vistaMind() {
+    const hoy = D.hoy, reg = M.delDia(D.animos);
+    const lunes = M.diaMas(hoy, -((M.semanaDia(hoy) + 6) % 7) - 28);
+    const celdas = [];
+    for (let i = 0; i < 35; i++) celdas.push(M.diaMas(lunes, i));
+    const valor = d => reg[d] && M.num(reg[d][campoMind]) ? reg[d][campoMind] : null;
+    const vals = celdas.map(valor).filter(M.num);
+    const nombres = campoMind === 'animo' ? M.ANIMO : M.ENERGIA;
+    const efs = M.efectos(D.dias, D.animos, D.ajustes, campoMind);
+    const crs = M.cruces(D.dias, D.animos, D.ajustes);
+    const racha = M.rachaApuntar(D.animos, hoy);
+    const entradas = D.animos.filter(a => a.linea || a.gratitud || a.tipo === 'momento').slice(-25).reverse();
+    let h = DEMO ? `<div class="demo">Datos de ejemplo.</div>` : '';
+    h += `<div class="segmento" role="group" aria-label="Qué ver"><button data-campo="animo" aria-pressed="${campoMind === 'animo'}">Ánimo</button><button data-campo="energia" aria-pressed="${campoMind === 'energia'}">Energía</button></div>
+    <section class="bloque">
+      <header><h3>Tu ${campoMind === 'animo' ? 'ánimo' : 'energía'}, 5 semanas</h3><span class="eti">${vals.length ? 'Media ' + M.coma(M.media(vals)) : ''}</span></header>
+      <div class="calendario">${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(x => `<span>${x}</span>`).join('')}
+        ${celdas.map(d => d > hoy ? '<i class="fuera"></i>' : `<i class="${d === hoy ? 'hoy' : ''}" title="${M.fechaCorta(d)} · ${valor(d) ? nombres[valor(d) - 1] : 'sin apuntar'}" style="${valor(d) ? 'background:' + COLOR_ANIMO[valor(d) - 1] : ''}"></i>`).join('')}
+      </div>
+      <div class="leyenda">${nombres.map((a, i) => `<span><i style="background:${COLOR_ANIMO[i]}"></i>${a}</span>`).join('')}</div>
+      ${racha ? `<p class="nota">Llevas <b>${racha} ${racha === 1 ? 'día' : 'días'} seguidos</b> apuntando.</p>` : ''}
+    </section>
+    <section class="bloque">
+      <header><h3>Lo que mueve tu ${campoMind === 'animo' ? 'ánimo' : 'energía'}</h3></header>
+      ${efs.length ? `<div class="mueve">${efs.map(ef => {
+        const w = Math.min(50, Math.abs(ef.v) / 1.5 * 50);
+        return `<div><span>${esc(ef.nombre)}</span><span class="barra"><em style="${ef.v >= 0 ? 'left:50%;width:' + w + '%;background:var(--bien)' : 'right:50%;width:' + w + '%;background:var(--mal)'}"></em></span><b>${ef.v >= 0 ? '+' : '−'}${Math.abs(ef.v).toFixed(1).replace('.', ',')}</b></div>`;
+      }).join('')}</div>
+      <p class="nota">Puntos de diferencia (de 1 a 5) entre los días con y sin cada cosa. Lo que más te sube: <b>${esc((efs.find(x => x.v > 0) || efs[0]).nombre.toLowerCase())}</b>. Cuantos más días apuntes, más fino.</p>`
+      : `<p class="nota">Cuando lleves unas dos semanas apuntando, aquí verás qué te sube y qué te baja ${campoMind === 'animo' ? 'el ánimo' : 'la energía'}: dormir, entrenar, la uni, tus etiquetas…</p>`}
+    </section>
+    ${crs.length ? `<section class="bloque"><header><h3>Con tus otras apps</h3></header><div>${crs.map(c => `<div class="cruce"><span class="app-chip">${esc(c.app)}</span><span>${neg(c.texto)}</span></div>`).join('')}</div></section>` : ''}
+    <button class="respirar" data-act="respirar"><span class="bola"></span><span><b>Respirar 2 minutos</b><span>Respiración en caja, 4 segundos cada paso. Baja el estrés al momento.</span></span></button>
+    <section class="bloque">
+      <header><h3>Tu diario</h3><span class="eti">Una línea al día</span></header>
+      ${entradas.length ? `<div class="diario">${entradas.map(a => `<div class="entrada">${cara(a.animo, COLOR_ANIMO[a.animo - 1])}<div>
+        ${a.linea ? `<p>${esc(a.linea)}</p>` : ''}${a.gratitud ? `<p>Lo bueno: ${esc(a.gratitud)}</p>` : ''}
+        <small>${M.fechaCorta(a.dia)}${a.tipo === 'momento' ? ' · momento ' + new Date(a.cuando).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}${a.etiquetas && a.etiquetas.length ? ' · ' + esc(a.etiquetas.join(', ')) : ''}</small></div></div>`).join('')}</div>`
+      : '<p class="nota">Lo que escribas al apuntar tu ánimo saldrá aquí.</p>'}
+    </section>`;
+    $('main').innerHTML = h;
+  }
+
+  // ---------- Trends ----------
+
+  function vistaTrends() {
+    const hoy = D.hoy, aj = D.ajustes, b = M.base(D.dias, hoy);
+    const ds = [];
+    for (let i = rango - 1; i >= 0; i--) ds.push(dia(M.diaMas(hoy, -i)));
+    const et = etiquetasFecha(ds);
+    const v = f => ds.map(d => { try { const x = f(d); return M.num(x) ? x : null; } catch (e) { return null; } });
+    const hay = a => a.filter(M.num).length >= 2;
+    const frases = M.resumenSemana(D.dias, D.animos, hoy, aj);
+    const sueno = v(d => d.sueno.min / 60), hrv = v(d => d.hrv.n), rep = v(d => d.reposo), est = v(d => d.estres.media);
+    const resp = v(d => d.sueno.resp), spo2 = v(d => d.sueno.spo2), pasos = v(d => d.pasos), kg = v(d => d.kg);
+    const ini = ds.map(d => d.sueno && M.minNoche(d.sueno.ini)).filter(M.num).sort((x, y) => x - y);
+    const ent = ds.filter(d => M.semanaDia(d.dia) >= 1 && M.semanaDia(d.dia) <= 5);
+    const fin = ds.filter(d => M.semanaDia(d.dia) === 0 || M.semanaDia(d.dia) === 6);
+    const mSem = M.media(ent.map(d => d.sueno && d.sueno.min)), mFin = M.media(fin.map(d => d.sueno && d.sueno.min));
+    const int7 = D.dias.filter(d => d.dia > M.diaMas(hoy, -7)).reduce((s, d) => s + (d.intensos || 0), 0);
+    const metaPasos = M.mediana(ds.map(d => d.metaPasos)) || 8000;
+    let h = DEMO ? `<div class="demo">Datos de ejemplo.</div>` : '';
+    h += `<div class="segmento" role="group" aria-label="Días">${[14, 30, 90].map(n => `<button data-rango="${n}" aria-pressed="${rango === n}">${n} días</button>`).join('')}</div>`;
+    if (frases.length) h += `<section class="tarjeta"><span class="eti">Tu semana, en frases</span><ul class="frases">${frases.map(f => `<li>${neg(f)}</li>`).join('')}</ul>
+      <button class="btn sec" data-act="informe">Informe del mes</button></section>`;
+    const bloque = (id, titulo, eti, nota) => `<section class="bloque"><header><h3>${titulo}</h3><span class="eti">${eti}</span></header><div id="${id}"></div>${nota ? `<p class="nota">${nota}</p>` : ''}</section>`;
+    if (hay(sueno)) h += bloque('gSueno', 'Sueño', 'Meta ' + M.hm(aj.meta),
+      (mSem && mFin ? `Entre semana duermes <b>${M.hm(mSem)}</b> y el finde <b>${M.hm(mFin)}</b>. ` : '') +
+      (ini.length >= 5 ? `Te sueles acostar entre las <b>${M.aHora(ini[Math.floor(ini.length * .2)])}</b> y las <b>${M.aHora(ini[Math.floor(ini.length * .8)])}</b>. ${ini[Math.floor(ini.length * .8)] - ini[Math.floor(ini.length * .2)] > 75 ? 'Es mucha diferencia: al cuerpo le sienta mejor una hora fija.' : 'Bastante regular, bien.'}` : ''));
+    if (hay(hrv)) h += bloque('gHrv', 'HRV de noche', 'Banda verde: tu rango', 'La HRV es cuánto varía el tiempo entre latidos. <b>Alta y estable = recuperado.</b> Si cae por debajo de la banda varios días, toca bajar el ritmo.');
+    if (hay(rep)) h += bloque('gReposo', 'Pulso en reposo', 'ppm', 'Si sube 4 o más por encima de lo normal, Melon te avisa: suele ser cansancio o un resfriado que empieza.');
+    if (hay(est)) h += bloque('gEstres', 'Estrés medio', 'de 0 a 100', 'De 0 a 25 es descanso, de 26 a 50 bajo y de 51 en adelante, alto.');
+    if (hay(resp) || hay(spo2)) h += `<section class="bloque"><header><h3>Tu noche</h3><span class="eti">Respiración y oxígeno</span></header>${hay(resp) ? '<div id="gResp"></div>' : ''}${hay(spo2) ? '<div id="gSpo2"></div>' : ''}
+      <p class="nota">Respiraciones por minuto${hay(spo2) ? ' y oxígeno en sangre (%)' : ''} mientras duermes. Si respiras más rápido de lo normal, a veces es que empieza un resfriado.</p></section>`;
+    if (hay(pasos)) h += bloque('gPasos', 'Pasos', 'Meta ' + Math.round(metaPasos).toLocaleString('es-ES'), `Esta semana llevas <b>${int7} minutos de intensidad</b>${int7 >= 150 ? ', más de los 150 que se recomiendan. Bien.' : ' de los 150 que se recomiendan.'}`);
+    if (hay(kg)) h += bloque('gPeso', 'Peso', 'kg', '');
+    const f = D.forma || {};
+    h += `<section class="bloque"><header><h3>Forma física</h3></header><div class="cifras">
+      <div class="cifra"><b>${f.vo2 || '—'}</b><span>VO2máx${f.vo2dia ? ' · ' + M.fechaCorta(f.vo2dia) : ''}</span></div>
+      <div class="cifra"><b>${f.edad || '—'}</b><span>Edad física</span></div>
+      <div class="cifra"><b>${M.num(b.reposo) ? Math.round(b.reposo) : '—'}</b><span>Reposo normal (ppm)</span></div>
+      <div class="cifra"><b>${M.num(M.media(pasos)) ? (M.media(pasos) / 1000).toFixed(1).replace('.', ',') + 'k' : '—'}</b><span>Pasos al día</span></div>
+    </div></section>`;
+    if (!hay(sueno) && !hay(hrv)) h += `<p class="nota">Aún no hay bastantes días para las gráficas. Conecta tu Garmin en ⋯ y se traen los últimos 90 días.</p>`;
+    $('main').innerHTML = h;
+
+    const pon = (id, o) => { if ($(id)) $(id).appendChild(grafica(Object.assign({ etiquetas: et }, o))); };
+    const fc = i => M.fechaCorta(ds[i].dia);
+    pon('gSueno', { tipo: 'barras', valores: sueno, min: 0, max: 10, meta: aj.meta / 60, color: x => x * 60 >= aj.meta - 15 ? 'var(--melon)' : x * 60 >= aj.meta - 60 ? 'var(--ojo)' : 'var(--mal)', tip: i => sueno[i] == null ? '' : fc(i) + ' · ' + M.hm(sueno[i] * 60) + (ds[i].sueno.pts ? ' · ' + ds[i].sueno.pts + ' pts' : '') });
+    pon('gHrv', { valores: hrv, banda: b.hrv, tip: i => hrv[i] == null ? '' : fc(i) + ' · ' + hrv[i] + ' ms' });
+    pon('gReposo', { valores: rep, color: 'var(--despierto)', alto: 110, meta: M.num(b.reposo) ? b.reposo : null, tip: i => rep[i] == null ? '' : fc(i) + ' · ' + rep[i] + ' ppm' });
+    pon('gEstres', { valores: est, min: 0, max: 60, color: 'var(--ojo)', alto: 110, tip: i => est[i] == null ? '' : fc(i) + ' · estrés ' + est[i] });
+    pon('gResp', { valores: resp, color: 'var(--ligero)', alto: 100, tip: i => resp[i] == null ? '' : fc(i) + ' · ' + resp[i] + ' resp/min' });
+    pon('gSpo2', { valores: spo2, color: 'var(--rem)', alto: 100, tip: i => spo2[i] == null ? '' : fc(i) + ' · ' + spo2[i] + ' % oxígeno' });
+    pon('gPasos', { tipo: 'barras', valores: pasos, min: 0, meta: metaPasos, color: x => x >= metaPasos ? 'var(--melon)' : 'var(--track)', tip: i => pasos[i] == null ? '' : fc(i) + ' · ' + pasos[i].toLocaleString('es-ES') + ' pasos' });
+    pon('gPeso', { unir: true, valores: kg, color: 'var(--text)', alto: 110, tip: i => kg[i] == null ? '' : fc(i) + ' · ' + M.coma(kg[i]) + ' kg' });
+  }
+
+  // ---------- Hojas ----------
+
+  function abrirHoja(html, alMontar) {
+    cerrarHoja();
+    const v = document.createElement('div');
+    v.className = 'velo';
+    v.id = 'velo';
+    v.innerHTML = `<div class="hoja" role="dialog" aria-modal="true">${html}<button class="cerrar" data-act="cerrar">Cerrar</button></div>`;
+    v.addEventListener('click', e => { if (e.target === v) cerrarHoja(); });
+    $('app').appendChild(v);
+    if (alMontar) alMontar(v);
+  }
+  function cerrarHoja() { const v = $('velo'); if (v) v.remove(); }
+
+  function hojaPilar(k) {
+    const hoy = D.hoy, d = dia(hoy), b = M.base(D.dias, hoy), aj = D.ajustes, reg = M.delDia(D.animos);
+    const s = d.sueno, intra = D.intra && D.intra.dia === hoy ? D.intra : null;
+    const hd = M.horaDormir(hoy, d, aj);
+    const H = {
+      sueno: () => !s ? '<span class="eti">Sueño</span><h3>Sin datos de anoche</h3><p>Sincroniza el reloj con Garmin Connect.</p>' : `<span class="eti">Sueño de anoche</span><h3>${M.hm(s.min)}${s.pts ? ' · ' + s.pts + ' puntos' : ''}</h3>
+        <div class="fases" style="height:14px">${fasesBar(s)}</div>
+        <div class="leyenda">${[['profundo', 'Profundo', s.prof], ['ligero', 'Ligero', s.lig], ['rem', 'REM', s.rem], ['despierto', 'Despierto', s.desp]].filter(x => M.num(x[2])).map(x => `<span><i style="background:var(--${x[0]})"></i>${x[1]} ${M.hm(x[2])}</span>`).join('')}</div>
+        <p><b>Profundo</b> repara el músculo: el que más te importa para la calistenia. <b>REM</b> ordena lo que has estudiado. ${M.num(s.prof) ? (s.prof >= 60 ? 'Anoche tuviste ' + M.hm(s.prof) + ' de profundo, bien.' : 'Anoche solo ' + M.hm(s.prof) + ' de profundo: acostarte a tu hora y sin pantallas ayuda.') : ''}</p>
+        <p>${s.ini ? 'Te dormiste a las <b>' + s.ini + '</b> y te despertaste a las <b>' + s.fin + '</b>. ' : ''}Para levantarte a las ${hd.despertar} con ${M.hm(hd.min)} de sueño, la hora buena hoy es <b>${hd.hora}</b>.</p>
+        ${s.resp || s.spo2 ? `<p>Durante la noche: ${s.resp ? '<b>' + s.resp + '</b> respiraciones por minuto' : ''}${s.resp && s.spo2 ? ' y ' : ''}${s.spo2 ? 'oxígeno al <b>' + s.spo2 + ' %</b>' + (s.spo2min ? ' (mínimo ' + s.spo2min + ' %)' : '') : ''}. ${s.fc ? 'Pulso medio ' + s.fc + '.' : ''}</p>` : ''}`,
+      cuerpo: () => `<span class="eti">Cuerpo</span><h3>${d.hrv ? 'HRV ' + d.hrv.n + ' ms' : 'Sin HRV'}${M.num(d.reposo) ? ' · reposo ' + d.reposo : ''}</h3>
+        <p>La <b>HRV</b> mide cuánto varía el tiempo entre latidos mientras duermes. ${b.hrv ? 'Si está en tu banda (' + b.hrv[0] + '–' + b.hrv[1] + ' ms), tu sistema nervioso ha descansado.' : ''} ${d.hrv && d.hrv.sem ? 'Tu media de 7 días es ' + d.hrv.sem + ' ms.' : ''}</p>
+        <p>El <b>pulso en reposo</b> es tu motor al ralentí. ${M.num(b.reposo) ? 'Lo normal en ti es ' + Math.round(b.reposo) + '. Si sube varios días, algo te está cansando.' : ''}</p>
+        ${d.listo ? `<p>Garmin le da a tu cuerpo un <b>${d.listo.p} de 100</b> para entrenar hoy${d.listo.nivel ? ' (' + ({ PRIME: 'a tope', HIGH: 'alta', MODERATE: 'media', LOW: 'baja', POOR: 'muy baja' }[d.listo.nivel] || d.listo.nivel.toLowerCase()) + ')' : ''}.</p>` : ''}`,
+      energia: () => `<span class="eti">Energía</span><h3>Body Battery ${d.bat ? d.bat.ahora : '—'}</h3>
+        <p>Es una batería de 0 a 100 que Garmin calcula con el pulso, la HRV y el estrés. <b>Dormir la carga; el esfuerzo y el estrés la gastan.</b></p>
+        ${d.bat ? `<p>Hoy empezaste en <b>${d.bat.max}</b>${M.num(d.bat.carga) ? ' (la noche te cargó ' + d.bat.carga + ')' : ''} y ahora te quedan <b>${d.bat.ahora}</b>. ${d.bat.ahora >= 50 ? 'De sobra para estudiar o entrenar.' : d.bat.ahora >= 25 ? 'Suficiente, pero no te pases.' : 'Por debajo de 25, mejor descansar.'}</p>` : ''}`,
+      mente: () => `<span class="eti">Mente</span><h3>${d.estres ? 'Estrés medio ' + d.estres.media : 'Sin estrés del reloj'}</h3>
+        <p>El reloj mide el estrés por el pulso: de 0 a 25 es descanso, de 26 a 50 bajo, de 51 a 75 medio y de 76 a 100 alto.</p>
+        ${d.estres ? `<p>Hoy llevas <b>${M.hm(d.estres.alto + d.estres.medio)}</b> con estrés medio o alto${intra && intra.max != null ? ' y el pico ha sido ' + intra.max : ''}.</p>` : ''}
+        <p>El reloj no sabe <b>cómo te sientes</b>; por eso Melon te pregunta el ánimo y lo cruza con todo lo demás.${reg[hoy] ? ' Hoy has dicho: <b>' + M.ANIMO[reg[hoy].animo - 1].toLowerCase() + '</b>.' : ''}</p>`,
+    };
+    abrirHoja(H[k]());
+  }
+
+  function hojaInforme() {
+    let mes = D.hoy.slice(0, 7);
+    const pintarInf = v => {
+      v.querySelector('h3').textContent = 'Informe de ' + M.MESES[Number(mes.slice(5)) - 1];
+      v.querySelector('textarea').value = M.informeMes(D.dias, D.animos, mes);
+    };
+    abrirHoja(`<span class="eti">Informe del mes</span><h3></h3>
+      <div class="fila1"><button class="btn sec" data-mes="-1">← Mes anterior</button><button class="btn sec" data-mes="1">Siguiente →</button></div>
+      <textarea class="campo" id="informe" readonly></textarea>
+      <div class="fila1"><button class="btn" data-act="copiarInforme" style="flex:1">Copiar</button>${navigator.share ? '<button class="btn sec" data-act="compartirInforme" style="flex:1">Compartir</button>' : ''}</div>`, v => {
+      pintarInf(v);
+      v.querySelectorAll('[data-mes]').forEach(bt => bt.onclick = () => {
+        const p = mes.split('-').map(Number);
+        const f = new Date(Date.UTC(p[0], p[1] - 1 + Number(bt.dataset.mes), 1)).toISOString().slice(0, 7);
+        if (f > D.hoy.slice(0, 7)) return;
+        mes = f;
+        pintarInf(v);
+      });
+    });
+  }
+
+  // ⋯: Garmin, tus otras apps, tu sueño, avisos y widget.
+  function hojaMas() {
+    const aj = D.ajustes, g = D.garmin;
+    const urlAviso = DEMO ? 'https://script.google.com/macros/s/TU_SERVIDOR/exec?accion=aviso&k=TU_CLAVE' : URL_API + '?accion=aviso&k=' + encodeURIComponent(K);
+    const horas = [360, 390, 420, 450, 480, 510, 540];
+    abrirHoja(`<span class="eti">Ajustes</span><h3>Melon</h3>
+      <h4>Garmin</h4>
+      <p>${g.conectado ? (g.ok === false ? 'Conectado, pero da error: ' + esc(g.error) : '<b>Conectado.</b> Se actualiza solo cada hora.') : 'Pega aquí tu clave de la <b>API personal de Garmin</b> (la misma que en Tangerine). Se traen los últimos 90 días.'}</p>
+      ${g.conectado ? '<div class="fila1"><button class="btn sec" data-act="actualizar" style="flex:1">Actualizar ahora</button><button class="btn sec" data-act="desconectar" style="flex:1">Desconectar</button></div>'
+        : '<input class="campo" id="claveGarmin" placeholder="Clave de Garmin" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="btn" data-act="conectar">Conectar Garmin</button>'}
+
+      <h4>Tus otras apps</h4>
+      <p>Pega el enlace con el que abres cada app (el del QR: lleva <b>?api=…&k=…</b>). Melon solo lee.</p>
+      ${APPS.map(([id, nombre, que]) => {
+        const a = D.apps[id] || {};
+        return `<div class="linea-mas"><span><b>${nombre}</b>${a.conectada ? (a.ok === false ? 'Error: ' + esc(a.error) : 'Conectada · ' + que) : que}</span>
+          ${a.conectada ? `<button class="enlace" data-quitar="${id}">Quitar</button>` : `<button class="enlace" data-conectar="${id}">Conectar</button>`}</div>`;
+      }).join('')}
+      <div id="pegarApp" hidden><input class="campo" id="enlaceApp" placeholder="https://hidegalaxy.github.io/…/?api=…&k=…" autocapitalize="off"><button class="btn" data-act="guardarApp" style="margin-top:8px;width:100%">Conectar</button></div>
+
+      <h4>Tu sueño</h4>
+      <div class="linea-mas"><span><b>Sueño que quieres</b>Para la meta y la hora de acostarte</span>
+        <select id="meta">${horas.map(m => `<option value="${m}" ${aj.meta === m ? 'selected' : ''}>${M.hm(m)}</option>`).join('')}</select></div>
+      ${[1, 2, 3, 4, 5, 6, 0].map(i => `<div class="linea-mas"><span>Te levantas el <b style="display:inline">${M.DIAS[i]}</b></span><input type="time" data-despertar="${i}" value="${aj.despertar[i]}"></div>`).join('')}
+      <span class="eti">Días de uni</span>
+      <div class="dias7">${[1, 2, 3, 4, 5, 6, 0].map(i => `<button data-uni="${i}" aria-pressed="${aj.uni.indexOf(i) >= 0}">${'DLMXJVS'[i]}</button>`).join('')}</div>
+
+      <h4>Avisos al móvil</h4>
+      <div class="linea-mas"><span><b>Avisos</b>Por la mañana, picos de estrés y hora de dormir</span>
+        <button class="btn ${aj.avisos ? '' : 'sec'}" data-act="avisos">${aj.avisos ? 'Sí' : 'No'}</button></div>
+      <ol>
+        <li>En <b>Dreceres</b>, crea una drecera nueva llamada <b>Melon avís</b>.</li>
+        <li>Afegeix <b>Obtén el contingut de l'URL</b> amb aquesta adreça:<div class="codigo">${esc(urlAviso)}</div><button class="enlace" data-copiar="${esc(urlAviso)}">Copiar la dirección</button></li>
+        <li>Afegeix <b>Si</b> → «Contingut de l'URL» <b>té qualsevol valor</b> → <b>Mostra la notificació</b> amb el contingut.</li>
+        <li>A <b>Automatització</b>, crea quatre automatitzacions d'<b>Hora del dia</b> (9:00, 13:00, 17:00 i 21:00), cada dia, <b>Executa immediatament</b>, que executin <b>Melon avís</b>.</li>
+      </ol>
+      <p>A las 9:00 te dice cómo estás (o si ves venir un resfriado); a las 13:00 y 17:00, solo si tu estrés se ha disparado; a las 21:00, a qué hora acostarte. El domingo por la noche, tu semana.</p>
+
+      <h4>Widget del iPhone</h4>
+      <ol>
+        <li>Instala <b>Scriptable</b> (gratis) desde la App Store.</li>
+        <li>Pulsa <b>Copiar el widget</b>, abre Scriptable, crea un script nuevo llamado <b>Melon</b> y pega.</li>
+        <li>Añade un widget de Scriptable a la pantalla de inicio o de bloqueo y elige el script <b>Melon</b>.</li>
+      </ol>
+      <button class="btn sec" data-act="copiarWidget">Copiar el widget</button>`, v => {
+      v.querySelector('#meta').onchange = e => enviar('ajustes', { meta: Number(e.target.value) });
+      v.querySelectorAll('[data-despertar]').forEach(inp => inp.onchange = () => {
+        const desp = D.ajustes.despertar.slice();
+        desp[Number(inp.dataset.despertar)] = inp.value;
+        if (/^\d\d:\d\d$/.test(inp.value)) enviar('ajustes', { despertar: desp });
+      });
+    });
+  }
+
+  // ---------- Respirar: caja de 4 segundos, 8 vueltas ----------
+
+  function respirar() {
+    const r = document.createElement('div');
+    r.className = 'respiracion';
+    r.innerHTML = '<div class="circulo"></div><div><h2>Inspira</h2><p>Vuelta 1 de 8</p></div><button class="btn sec">Terminar</button>';
+    $('app').appendChild(r);
+    const c = r.querySelector('.circulo'), t = r.querySelector('h2'), p = r.querySelector('p');
+    const pasos = [['Inspira', 1], ['Mantén', 1], ['Suelta', .55], ['Mantén', .55]];
+    let k = 0, vuelta = 1;
+    let wake = null;
+    try { navigator.wakeLock && navigator.wakeLock.request('screen').then(w => { wake = w; }).catch(() => {}); } catch (e) {}
+    const fin = () => { clearInterval(reloj); r.remove(); try { wake && wake.release(); } catch (e) {} };
+    const paso = () => {
+      const [txt, escala] = pasos[k % 4];
+      t.textContent = txt; c.style.transform = 'scale(' + escala + ')';
+      p.textContent = 'Vuelta ' + vuelta + ' de 8';
+      k++; if (k % 4 === 0) vuelta++;
+      if (vuelta > 8) { fin(); avisar('Hecho: 2 minutos'); }
+    };
+    requestAnimationFrame(paso);
+    const reloj = setInterval(paso, 4000);
+    r.querySelector('button').onclick = fin;
+  }
+
+  function avisar(t) {
+    $('toast').textContent = t;
+    $('toast').classList.add('ver');
+    clearTimeout(avisar.t);
+    avisar.t = setTimeout(() => $('toast').classList.remove('ver'), 3000);
+  }
+  async function copiar(texto, que) {
+    try { await navigator.clipboard.writeText(texto); avisar(que + ' copiado'); }
+    catch (e) { avisar('No se ha podido copiar: mantén pulsado para seleccionarlo'); }
+  }
+
+  // ---------- Toques ----------
+
+  document.addEventListener('click', async e => {
+    const t = e.target.closest('button, [data-hoja]');
+    if (!t) return;
+    const ds = t.dataset;
+    if (ds.tab) return ir(ds.tab);
+    if (ds.hoja) return hojaPilar(ds.hoja);
+    if (ds.rango) { rango = Number(ds.rango); try { localStorage.setItem('melon.rango', rango); } catch (err) {} return pintar(); }
+    if (ds.campo) { campoMind = ds.campo; return pintar(); }
+    if (ds.animo) { borrador.animo = Number(ds.animo); return pintarAnimo(); }
+    if (ds.energia) { borrador.energia = borrador.energia === Number(ds.energia) ? null : Number(ds.energia); return pintarAnimo(); }
+    if (ds.etiqueta) {
+      const i = borrador.etiquetas.indexOf(ds.etiqueta);
+      i < 0 ? borrador.etiquetas.push(ds.etiqueta) : borrador.etiquetas.splice(i, 1);
+      return t.setAttribute('aria-pressed', i < 0);
+    }
+    if (ds.momento) { momento.animo = Number(ds.momento); return pintarMomento(M.momentoEstres(D.intra, ahoraMin())); }
+    if (ds.momEti) {
+      const i = momento.etiquetas.indexOf(ds.momEti);
+      i < 0 ? momento.etiquetas.push(ds.momEti) : momento.etiquetas.splice(i, 1);
+      return t.setAttribute('aria-pressed', i < 0);
+    }
+    if (ds.uni) {
+      const i = Number(ds.uni), uni = D.ajustes.uni.slice();
+      const j = uni.indexOf(i);
+      j < 0 ? uni.push(i) : uni.splice(j, 1);
+      enviar('ajustes', { uni });
+      return t.setAttribute('aria-pressed', j < 0);
+    }
+    if (ds.copiar) return copiar(ds.copiar, 'Enlace');
+    if (ds.conectar) { hojaMas.app = ds.conectar; $('pegarApp').hidden = false; $('enlaceApp').focus(); return; }
+    if (ds.quitar) return accionDirecta('conexion', { app: ds.quitar, enlace: '' }, 'Quitada');
+    switch (ds.act) {
+      case 'cerrar': return cerrarHoja();
+      case 'mas': return hojaMas();
+      case 'respirar': cerrarHoja(); return respirar();
+      case 'recargar': return cargar();
+      case 'informe': return hojaInforme();
+      case 'cambiarAnimo': {
+        const r = M.delDia(D.animos)[D.hoy];
+        borrador = { animo: r.animo, energia: r.energia, etiquetas: (r.etiquetas || []).slice(), linea: r.linea || '', gratitud: r.gratitud || '' };
+        return pintarAnimo();
+      }
+      case 'guardarAnimo': {
+        if (!borrador || !borrador.animo) return;
+        const ya = M.delDia(D.animos)[D.hoy];
+        enviar('animo', Object.assign({ id: ya ? ya.id : nid('a'), dia: D.hoy, tipo: 'dia', cuando: new Date().toISOString() }, borrador));
+        borrador = null;
+        return avisar('Guardado');
+      }
+      case 'guardarMomento': {
+        if (!momento || !momento.animo) return;
+        enviar('animo', { id: nid('m'), dia: D.hoy, tipo: 'momento', cuando: new Date().toISOString(), animo: momento.animo, etiquetas: momento.etiquetas, linea: '', gratitud: '' });
+        momento = null;
+        return avisar('Apuntado');
+      }
+      case 'avisos': enviar('ajustes', { avisos: !D.ajustes.avisos }); return hojaMas();
+      case 'conectar': return accionDirecta('garmin', { garmin: $('claveGarmin').value.trim() }, 'Conectando… puede tardar un minuto');
+      case 'desconectar': return accionDirecta('garmin', { garmin: '' });
+      case 'actualizar': return accionDirecta('actualizar', {}, 'Mirando Garmin…');
+      case 'guardarApp': return accionDirecta('conexion', { app: hojaMas.app, enlace: $('enlaceApp').value.trim() }, 'Conectando…');
+      case 'copiarInforme': return copiar($('informe').value, 'Informe');
+      case 'compartirInforme': try { await navigator.share({ text: $('informe').value }); } catch (err) {} return;
+      case 'copiarWidget':
+        if (DEMO) return avisar('Primero instala tu servidor');
+        try { copiar(await llamar('scriptable'), 'Widget'); } catch (err) { avisar('Error: ' + err.message); }
+        return;
+    }
+  });
+
+  // Lo que no puede esperar en la cola (conectar cosas): se hace ya y se espera la respuesta.
+  async function accionDirecta(que, d, mientras) {
+    if (DEMO) return avisar('En la demo no se conecta nada');
+    if (mientras) avisar(mientras);
+    cargando(true);
+    try {
+      const r = await llamar(que, d);
+      D = r.datos; guardarCache();
+      avisar(r.msg || 'Hecho');
+      const habia = !!$('velo');
+      pintar();
+      if (habia && que !== 'actualizar') hojaMas();
+    } catch (e) {
+      avisar(e.red ? 'Sin conexión' : e.message);
+    }
+    cargando(false);
+  }
+
+  // ---------- Datos de ejemplo (sin servidor) ----------
+
+  function demo() {
+    const hoy = hoyLocal();
+    let semilla = 7;
+    const azar = () => (semilla = (semilla * 16807) % 2147483647) / 2147483647;
+    const dias = [], animos = [];
+    const lineas = ['Primera vez que llego a 2 dominadas seguidas.', 'Mucho lío en el trabajo y luego uni hasta tarde.', 'Domingo con amigos en la playa.', 'Día tranquilo, estudiando en casa.', 'Me he notado cansado todo el día.'];
+    const buenas = ['Café con mi madre', 'Terminé el tema 3 de STE', 'Atardecer volviendo a casa', 'Me salió bien la carrera'];
+    for (let i = 90; i >= 0; i--) {
+      const d = M.diaMas(hoy, -i), sd = M.semanaDia(d);
+      const uni = sd === 2 || sd === 4, finde = sd === 0 || sd === 6;
+      const entreno = sd >= 1 && sd <= 5 && azar() > .35;
+      const min = Math.round((finde ? 460 : 400) + (azar() - .45) * 130);
+      const estres = Math.round(22 + (uni ? 9 : 0) + (450 - min) / 12 + azar() * 10);
+      const hrv = Math.round(60 + (min - 420) / 15 - (estres - 30) * .25 + (azar() - .5) * 8);
+      const reposo = Math.round(50 + (420 - min) / 75 + (azar() - .5) * 2.5);
+      const pasos = Math.round(5200 + azar() * 6800 + (entreno ? 1500 : 0));
+      const ini = M.aHora((finde ? 24 * 60 + 30 : 23 * 60 + 10) + (azar() - .5) * 70);
+      const x = {
+        dia: d,
+        sueno: { min, pts: Math.round(40 + min / 10 + (azar() - .5) * 10), prof: Math.round(min * (.13 + azar() * .06)), rem: Math.round(min * (.2 + azar() * .05)), desp: Math.round(8 + azar() * 20), ini, fin: M.aHora(M.aMin(ini) + min + 15), spo2: Math.round(95 + azar() * 3), spo2min: 86, resp: Math.round(13 + azar() * 2), fc: reposo + 5 },
+        hrv: { n: hrv, sem: 58, est: 'BALANCED', bajo: 52, alto: 70 },
+        reposo, pasos, metaPasos: 10000, intensos: entreno ? 30 + Math.round(azar() * 30) : Math.round(azar() * 10),
+        estres: { media: estres, max: 70 + Math.round(azar() * 25), alto: Math.round(azar() * 40), medio: Math.round(30 + azar() * 60) },
+        bat: { max: Math.round(55 + (min - 380) / 4 + azar() * 10), min: 15 + Math.round(azar() * 15), carga: Math.round(40 + (min - 380) / 4), gasto: 50 + Math.round(azar() * 20) },
+        act: entreno ? [{ t: sd === 2 || sd === 4 ? 'run' : 'fuerza', n: sd === 2 || sd === 4 ? 'Carrera suave' : 'Calistenia A', min: 45, h: '06:20', carga: 60 }] : [],
+        ext: { estudio: finde ? 120 + Math.round(azar() * 90) : Math.round(azar() * 150), examen: i >= 0 && i <= 3, agua: 1500 + Math.round(azar() * 1200), creatina: azar() > .2, prot: 100 + Math.round(azar() * 50), gasto: Math.round(azar() * 35) },
+      };
+      x.sueno.lig = min - x.sueno.prof - x.sueno.rem;
+      x.bat.ahora = x.bat.min + 20;
+      if (i % 7 === 0) x.kg = Math.round((81.5 + (90 - i) * .01 + (azar() - .5) * .4) * 10) / 10;
+      dias.push(x);
+      if (i > 0 && azar() > .12) {
+        let a = 2.6 + (min - 410) / 85 + (entreno ? 1.1 : 0) - (estres - 30) * .045 + (pasos > 8000 ? .3 : 0) + (azar() - .5) * 1.1;
+        a = Math.max(1, Math.min(5, Math.round(a)));
+        const et = [];
+        if (uni && azar() > .5) et.push('Agobiado con la uni');
+        if (finde && azar() > .5) et.push('Con amigos');
+        if (a >= 4) et.push(azar() > .5 ? 'Motivado' : 'Tranquilo');
+        if (a <= 2) et.push('Cansado');
+        animos.push({ id: 'd' + i, cuando: d + 'T21:30:00.000Z', dia: d, tipo: 'dia', animo: a, energia: Math.max(1, Math.min(5, a + (azar() > .5 ? 0 : -1))), etiquetas: et, linea: i < 20 && azar() > .6 ? lineas[i % lineas.length] : '', gratitud: i < 20 && azar() > .6 ? buenas[i % buenas.length] : '' });
+      }
+    }
+    const t = dias[dias.length - 1];
+    Object.assign(t, { reposo: 51, hrv: { n: 61, sem: 58, est: 'BALANCED', bajo: 52, alto: 70 }, listo: { p: 78, nivel: 'HIGH' } });
+    t.sueno = Object.assign(t.sueno, { min: 372, pts: 71, prof: 62, lig: 196, rem: 98, desp: 16, ini: '23:40', fin: '05:58', necesita: 470 });
+    // Batería y estrés de hoy hasta ahora.
+    const ahora = ahoraMin(), bateria = [], estres = [];
+    const claves = [[0, 30], [360, 82], [390, 80], [450, 73], [540, 72], [840, 63], [930, 66], [1170, 58], [1440, 30]];
+    for (let i = 0; i < 96; i++) {
+      const m = i * 15;
+      let k = 0; while (claves[k + 1] && claves[k + 1][0] <= m) k++;
+      const a = claves[k], b2 = claves[Math.min(k + 1, claves.length - 1)];
+      bateria.push(m <= ahora ? Math.round(a[1] + (b2[1] - a[1]) * (b2[0] === a[0] ? 0 : (m - a[0]) / (b2[0] - a[0]))) : null);
+      const base = m < 360 ? 12 : m < 540 ? 30 : m < 840 ? 38 : m < 1020 ? 52 : 30;
+      estres.push(m <= ahora ? Math.max(0, Math.round(base + (azar() - .5) * 30 + (m >= 960 && m < 1020 ? 25 : 0))) : null);
+    }
+    const ahoraBat = bateria.filter(M.num).pop();
+    t.bat = { max: 82, min: Math.min.apply(null, bateria.filter(M.num)), ahora: ahoraBat, carga: 52, gasto: 82 - ahoraBat };
+    t.estres = { media: 31, max: 74, alto: 25, medio: 70 };
+    t.act = ahora > 450 ? [{ t: 'fuerza', n: 'Calistenia A', min: 48, h: '06:20', carga: 64 }] : [];
+    return {
+      hoy, dias, animos,
+      intra: { dia: hoy, paso: 15, estres, bateria, max: 74 },
+      forma: { vo2: 42, vo2dia: '2026-06-27', edad: 18 },
+      ajustes: M.ajustes({}),
+      garmin: { conectado: true, ok: true, cuando: new Date().toISOString() },
+      apps: { tangerine: { conectada: true, ok: true }, plum: { conectada: true, ok: true }, cherry: { conectada: true, ok: true }, lima: { conectada: true, ok: true } },
+      ext: { tangerine: { hoy: { titulo: 'Calistenia B', hora: '06:15', clase: 'cal', hecho: false }, rodilla: 2 } },
+    };
+  }
+
+  // ---------- Arranque ----------
+
+  $('btnRespirar').onclick = respirar;
+  $('btnMas').onclick = () => D && hojaMas();
+  window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (['today', 'mind', 'trends'].indexOf(h) >= 0) ir(h); });
+  if (!DEMO) {
+    const c = leerCache();
+    if (c) { D = c; pintar(); quitarSplash(); }
+    if (!K) pantallaClave(); else { cargar(); vaciar(); }
+  } else cargar();
+</script>
+</body>
+</html>

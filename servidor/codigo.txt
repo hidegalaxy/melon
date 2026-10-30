@@ -1,0 +1,1200 @@
+/**
+ * Melon: cómo estás, con los datos de tu Garmin y tu ánimo en una hoja de tu Google Drive.
+ *
+ * Una vez: pega este archivo en un proyecto de script.google.com, ejecuta configurar()
+ * y publícalo como aplicación web (Ejecutar como: yo · Quién tiene acceso: cualquier usuario).
+ * Al actualizar el código, vuelve a ejecutar configurar(): añade lo que falte sin tocar tus datos.
+ *
+ * La app vive en GitHub Pages (WEB) y habla con este servidor por fetch:
+ * GET ?accion=datos&k=CLAVE y POST { api: 'accion', k, que, d }.
+ * Cada hora, un activador trae lo nuevo de Garmin (API personal, solo lectura) y ya lo deja calculado.
+ */
+
+const TZ = 'Europe/Madrid';
+const WEB = 'https://hidegalaxy.github.io/melon/';
+const GARMIN_URL = 'https://personal.connectapi.garmin.com';
+
+// Un día por fila, con todo lo del reloj (y lo de tus otras apps) en un JSON: así no hace falta tocar columnas.
+const ESQUEMA = {
+  Dias: ['dia', 'datos', 'actualizado'],
+  Animo: ['id', 'cuando', 'dia', 'tipo', 'animo', 'energia', 'etiquetas', 'linea', 'gratitud'],
+};
+const DIAS_APP = 120;        // días que se mandan a la app
+const DIAS_INICIO = 90;      // días que se traen de Garmin al conectar
+const APPS = ['tangerine', 'plum', 'cherry', 'lima'];
+
+// <logica>
+const MELON = (() => {
+  const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const ANIMO = ['Fatal', 'Mal', 'Normal', 'Bien', 'Genial'];
+  const ENERGIA = ['Sin pilas', 'Floja', 'Normal', 'Con ganas', 'A tope'];
+  const ETIQUETAS = ['Tranquilo', 'Motivado', 'Contento', 'Cansado', 'Estresado', 'Ansioso', 'Triste', 'Con amigos', 'Con familia', 'Solo', 'Agobiado con la uni', 'Mucho trabajo', 'Enfermo'];
+  // Las de situación pueden explicar el ánimo; las de emoción solo lo describen (no se cruzan).
+  const SITUACIONES = ['Con amigos', 'Con familia', 'Solo', 'Agobiado con la uni', 'Mucho trabajo', 'Enfermo'];
+  const AJUSTES = {
+    despertar: ['08:30', '06:00', '06:00', '06:00', '06:00', '06:00', '08:30'], // domingo a sábado
+    meta: 450,          // minutos de sueño que quieres
+    uni: [2, 4],        // martes y jueves
+    avisos: true,
+  };
+
+  // ---------- Utilidades ----------
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const num = x => typeof x === 'number' && isFinite(x);
+  const media = a => { a = a.filter(num); return a.length ? a.reduce((s, x) => s + x, 0) / a.length : null; };
+  const mediana = a => {
+    a = a.filter(num).sort((x, y) => x - y);
+    if (!a.length) return null;
+    const m = a.length >> 1;
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  };
+  const percentil = (a, p) => {
+    a = a.filter(num).sort((x, y) => x - y);
+    if (!a.length) return null;
+    const i = (a.length - 1) * p, lo = Math.floor(i);
+    return a[lo] + (a[Math.min(lo + 1, a.length - 1)] - a[lo]) * (i - lo);
+  };
+  const r1 = x => Math.round(x * 10) / 10;
+  const coma = x => String(r1(x)).replace('.', ',');
+  const diaMas = (dia, n) => {
+    const p = dia.split('-').map(Number);
+    return new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)).toISOString().slice(0, 10);
+  };
+  const semanaDia = dia => new Date(dia + 'T12:00:00Z').getUTCDay();
+  const fechaCorta = dia => DIAS[semanaDia(dia)].slice(0, 3) + ' ' + Number(dia.slice(8));
+  // 465 → "7 h 45"; 40 → "40 min"
+  const hm = min => {
+    if (!num(min)) return '—';
+    min = Math.round(min);
+    const h = Math.floor(min / 60), m = min % 60;
+    return h ? h + ' h' + (m ? ' ' + String(m).padStart(2, '0') : '') : m + ' min';
+  };
+  const aMin = hora => { const p = String(hora || '').split(':').map(Number); return p.length === 2 && num(p[0]) ? p[0] * 60 + p[1] : null; };
+  const aHora = min => { min = ((Math.round(min) % 1440) + 1440) % 1440; return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0'); };
+  // La hora de acostarse cuenta desde las 18:00 para que las 23:30 y la 01:00 se puedan comparar.
+  const minNoche = hora => { const m = aMin(hora); return m == null ? null : (m < 18 * 60 ? m + 1440 : m); };
+  const ajustes = a => Object.assign({}, AJUSTES, a || {});
+  const plano = s => String(s).replace(/\*/g, '');
+  const ajustesDe = ajustes;
+
+  // ---------- Tu normal ----------
+  // Lo normal en ti: medianas de los 30 días anteriores (sin contar hoy).
+  function base(dias, hoy) {
+    const prev = dias.filter(d => d.dia < hoy && d.dia >= diaMas(hoy, -30));
+    const v = f => prev.map(f).filter(num);
+    const hrvs = prev.map(d => d.hrv).filter(h => h && num(h.n));
+    const ultimo = hrvs.slice().reverse().find(h => num(h.bajo) && num(h.alto));
+    const banda = ultimo ? [ultimo.bajo, ultimo.alto]
+      : hrvs.length >= 7 ? [Math.round(percentil(hrvs.map(h => h.n), .25)), Math.round(percentil(hrvs.map(h => h.n), .75))] : null;
+    return {
+      n: prev.length,
+      sueno: mediana(v(d => d.sueno && d.sueno.min)),
+      acostarse: mediana(v(d => d.sueno && minNoche(d.sueno.ini))),
+      reposo: mediana(v(d => d.reposo)),
+      resp: mediana(v(d => d.sueno && d.sueno.resp)),
+      spo2: mediana(v(d => d.sueno && d.sueno.spo2)),
+      estres: mediana(v(d => d.estres && d.estres.media)),
+      pasos: mediana(v(d => d.pasos)),
+      hrv: banda,
+    };
+  }
+
+  // ---------- Los cuatro pilares ----------
+  function pilares(d, b, aj, animo) {
+    aj = ajustes(aj);
+    const p = {};
+    const s = d.sueno;
+    if (s && num(s.min)) {
+      const v = .6 * clamp(s.min / aj.meta, 0, 1) + .4 * (num(s.pts) ? s.pts / 100 : clamp(s.min / aj.meta, 0, 1));
+      const corto = s.min < aj.meta - 45, malo = num(s.pts) && s.pts < 60;
+      p.sueno = {
+        v, valor: hm(s.min),
+        chip: malo ? ['Malo', 'mal'] : corto ? ['Corto', 'ojo'] : v >= .85 ? ['Bien', 'bien'] : ['Justo', 'ojo'],
+        texto: (num(s.pts) ? s.pts + ' puntos' : 'Sin puntos') + (num(s.prof) ? ' · ' + hm(s.prof) + ' de profundo' : ''),
+      };
+    }
+    const h = d.hrv;
+    if ((h && num(h.n)) || num(d.reposo)) {
+      let vh = null, chip = ['Recuperado', 'bien'];
+      if (h && num(h.n) && b.hrv) {
+        if (h.n < b.hrv[0]) { vh = clamp(1 - (b.hrv[0] - h.n) / 12, 0, 1); chip = h.n < b.hrv[0] - 4 ? ['Cansado', 'mal'] : ['Algo bajo', 'ojo']; }
+        else vh = h.n > b.hrv[1] ? .9 : 1;
+      } else if (h && num(h.n)) vh = .8;
+      const dr = num(d.reposo) && num(b.reposo) ? d.reposo - b.reposo : 0;
+      const vr = clamp(1 - Math.max(0, dr - 1) / 6, 0, 1);
+      if (dr >= 4 && chip[1] === 'bien') chip = ['Cargado', 'ojo'];
+      p.cuerpo = {
+        v: vh == null ? vr : .65 * vh + .35 * vr,
+        valor: h && num(h.n) ? h.n + ' ms' : d.reposo + ' ppm',
+        chip,
+        texto: num(d.reposo) ? 'Reposo ' + d.reposo + ' ppm' + (dr >= 2 ? ', ' + Math.round(dr) + ' más de lo normal' : ', lo normal') : 'Sin pulso en reposo',
+        hrv: h && num(h.n) ? h.n : null, banda: b.hrv,
+      };
+    }
+    const bt = d.bat;
+    if (bt && num(bt.ahora)) {
+      p.energia = {
+        v: clamp((num(bt.max) ? bt.max : bt.ahora) / 90, 0, 1), valor: bt.ahora,
+        chip: bt.ahora >= 50 ? ['Te queda', 'bien'] : bt.ahora >= 25 ? ['Justa', 'ojo'] : ['Baja', 'mal'],
+        texto: 'Body Battery' + (num(bt.max) ? ' · llegaste a ' + bt.max : ''),
+      };
+    }
+    const e = d.estres && num(d.estres.media) ? d.estres.media : null;
+    if (e != null || animo) {
+      const ve = e == null ? null : clamp((60 - e) / 35, 0, 1);
+      const va = animo ? (animo.animo - 1) / 4 : null;
+      p.mente = {
+        v: ve == null ? va : va == null ? ve : (ve + va) / 2,
+        valor: animo ? ANIMO[animo.animo - 1] : e,
+        chip: animo ? [ANIMO[animo.animo - 1], animo.animo >= 4 ? 'bien' : animo.animo === 3 ? 'nada' : animo.animo === 2 ? 'ojo' : 'mal']
+          : e <= 25 ? ['Tranquilo', 'bien'] : e <= 40 ? ['Normal', 'bien'] : e <= 50 ? ['Algo tenso', 'ojo'] : ['Estresado', 'mal'],
+        texto: e == null ? 'Sin estrés del reloj' : (animo ? 'Estrés medio ' + e : 'Falta tu ánimo de hoy'),
+        estres: e,
+      };
+    }
+    return p;
+  }
+
+  // ---------- Cómo estás hoy: nota y frase ----------
+  const PESOS = { sueno: .3, cuerpo: .35, energia: .2, mente: .15 };
+  function estado(d, b, aj, animo) {
+    aj = ajustes(aj);
+    const p = pilares(d, b, aj, animo);
+    const ks = Object.keys(p);
+    if (!ks.length) return { p: null, titulo: 'Aún no hay datos de hoy', texto: 'Sincroniza el reloj con Garmin Connect y vuelve a abrir Melon.', pilares: p, entreno: null };
+    const peso = ks.reduce((s, k) => s + PESOS[k], 0);
+    let nota = Math.round(100 * ks.reduce((s, k) => s + PESOS[k] * p[k].v, 0) / peso);
+    // Si dormiste poco o mal, no estás «a tope» aunque lo demás vaya bien.
+    if (p.sueno && p.sueno.chip[1] !== 'bien') nota = Math.min(nota, 79);
+    const flojo = ks.slice().sort((x, y) => p[x].v - p[y].v)[0];
+    const titulo = nota >= 80 ? 'Estás a tope'
+      : nota >= 65 ? (flojo === 'sueno' && p.sueno.v < .8 ? 'Recuperado, pero con poco sueño' : flojo === 'mente' && p.mente.v < .6 ? 'Bien de cuerpo, cargado de cabeza' : 'Estás bien')
+      : nota >= 50 ? 'Vas justo hoy' : 'Hoy toca cuidarse';
+    const f = [];
+    const s = d.sueno;
+    if (s && num(s.min)) {
+      const dif = num(b.sueno) ? s.min - b.sueno : 0;
+      f.push('Has dormido *' + hm(s.min) + '*' + (dif <= -25 ? ', ' + hm(-dif) + ' menos de lo que sueles.' : dif >= 25 ? ', ' + hm(dif) + ' más de lo que sueles.' : ', lo normal en ti.'));
+    }
+    if (p.cuerpo) {
+      const c = p.cuerpo.chip[1];
+      f.push(c === 'bien' ? 'Tu cuerpo se ha recuperado: la HRV está en tu rango y el pulso, normal.'
+        : p.cuerpo.chip[0] === 'Cargado' ? 'El pulso en reposo está más alto de lo normal: el cuerpo nota algo.'
+        : 'Tu HRV está por debajo de tu rango: el cuerpo aún nota el esfuerzo.');
+    }
+    if (p.energia && p.energia.chip[1] === 'mal') f.push('Te queda poca energía (' + d.bat.ahora + ').');
+    const entreno = nota >= 75 ? 'normal' : nota >= 55 ? 'suave' : 'descanso';
+    f.push(entreno === 'normal' ? 'Puedes entrenar con normalidad.' : entreno === 'suave' ? 'Puedes entrenar, pero sin buscar marcas.' : 'Mejor descansar o solo moverte suave.');
+    return { p: nota, titulo, texto: f.join(' '), pilares: p, entreno, flojo };
+  }
+
+  // ---------- A qué hora acostarte ----------
+  // Para levantarte mañana a tu hora con el sueño que quieres (o el que pide Garmin), más 15 min para dormirte.
+  function horaDormir(hoy, d, aj) {
+    aj = ajustes(aj);
+    const manana = diaMas(hoy, 1);
+    const despertar = aj.despertar[semanaDia(manana)];
+    const necesita = d && d.sueno && num(d.sueno.necesita) && d.sueno.necesita >= 360 ? Math.max(aj.meta, d.sueno.necesita) : aj.meta;
+    // Si anoche faltó sueño, se añade la mitad de lo que faltó (hasta 45 min).
+    const falta = d && d.sueno && num(d.sueno.min) ? clamp((aj.meta - d.sueno.min) / 2, 0, 45) : 0;
+    const total = necesita + falta;
+    return { hora: aHora(Math.floor((aMin(despertar) - total - 15) / 5) * 5), despertar, min: total };
+  }
+
+  // ---------- Señales de que te estás poniendo malo ----------
+  function resfriado(dias, b, hoy) {
+    const d = dias.find(x => x.dia === hoy);
+    if (!d || !num(b.reposo) || b.n < 10) return null;
+    const senales = [];
+    if (num(d.reposo) && d.reposo - b.reposo >= 4) senales.push('el pulso en reposo está ' + Math.round(d.reposo - b.reposo) + ' ppm más alto');
+    if (d.hrv && num(d.hrv.n) && b.hrv && d.hrv.n < b.hrv[0] - 3) senales.push('la HRV está por debajo de tu rango');
+    if (d.sueno && num(d.sueno.resp) && num(b.resp) && d.sueno.resp - b.resp >= 1.5) senales.push('respiras más rápido de noche');
+    if (d.sueno && num(d.sueno.spo2) && num(b.spo2) && b.spo2 - d.sueno.spo2 >= 3) senales.push('el oxígeno de la noche ha bajado');
+    if (!senales.length) return null;
+    const ayer = dias.find(x => x.dia === diaMas(hoy, -1));
+    const seguido = ayer && num(ayer.reposo) && ayer.reposo - b.reposo >= 4;
+    const nivel = senales.length >= 2 || (seguido && senales.length) ? 'alerta' : 'vigila';
+    const lista = senales.length > 1 ? senales.slice(0, -1).join(', ') + ' y ' + senales[senales.length - 1] : senales[0];
+    return {
+      nivel, senales,
+      texto: nivel === 'alerta'
+        ? 'Ojo: ' + lista + '. Suele pasar 1 o 2 días antes de un resfriado. Hoy, descanso, agua y a dormir pronto.'
+        : 'Una cosa rara: ' + lista + '. Puede ser cansancio. Si mañana sigue, Melon te avisa.',
+    };
+  }
+
+  // ---------- Rachas de ánimo bajo ----------
+  function rachaBaja(animos, hoy) {
+    const porDia = delDia(animos);
+    let n = 0, d = porDia[hoy] ? hoy : diaMas(hoy, -1);
+    while (porDia[d] && porDia[d].animo <= 2) { n++; d = diaMas(d, -1); }
+    if (n < 3) return null;
+    return {
+      dias: n,
+      texto: 'Llevas ' + n + ' días con el ánimo bajo. No hace falta arreglarlo todo hoy: sal a andar 20 minutos con luz, habla con alguien de confianza y acuéstate a tu hora. Si sigue así una o dos semanas, cuéntaselo a un médico o a un psicólogo: es lo normal y ayuda.',
+    };
+  }
+
+  // El registro del día (el último que apuntaste ese día), por fecha.
+  function delDia(animos) {
+    const o = {};
+    (animos || []).filter(a => a.tipo !== 'momento').forEach(a => { if (!o[a.dia] || a.cuando > o[a.dia].cuando) o[a.dia] = a; });
+    return o;
+  }
+
+  // Racha de días seguidos apuntando el ánimo (hoy cuenta si ya está; si no, desde ayer).
+  function rachaApuntar(animos, hoy) {
+    const o = delDia(animos);
+    let n = 0, d = o[hoy] ? hoy : diaMas(hoy, -1);
+    while (o[d]) { n++; d = diaMas(d, -1); }
+    return n;
+  }
+
+  // ---------- Pico de estrés ahora ----------
+  // intra = { dia, paso (min), estres: [valores por tramo desde las 00:00, null si no hay] }
+  function momentoEstres(intra, ahoraMin) {
+    if (!intra || !intra.estres) return null;
+    const paso = intra.paso || 15;
+    const hasta = Math.min(intra.estres.length, Math.floor(ahoraMin / paso) + 1);
+    const desde = Math.max(0, hasta - Math.round(120 / paso));
+    let altos = 0, max = 0, cuando = null;
+    for (let i = desde; i < hasta; i++) {
+      const v = intra.estres[i];
+      if (num(v) && v >= 60) { altos++; if (v > max) { max = v; cuando = i * paso; } }
+    }
+    if (altos * paso < 20) return null;
+    return { max, hora: aHora(cuando), texto: 'Tu estrés ha subido a ' + max + ' hacia las ' + aHora(cuando) + '. ¿Qué está pasando?' };
+  }
+
+  // ---------- Lo que mueve tu ánimo (o tu energía) ----------
+  // Diferencia de la media entre los días con y sin cada cosa. Solo sale si hay 4 días de cada lado.
+  function efectos(dias, animos, aj, campo) {
+    aj = ajustes(aj);
+    campo = campo || 'animo';
+    const reg = delDia(animos);
+    const filas = dias.filter(d => reg[d.dia] && num(reg[d.dia][campo])).map(d => ({ d, a: reg[d.dia] }));
+    const ext = (d, k) => d.ext && num(d.ext[k]) ? d.ext[k] : null;
+    const factores = [
+      ['Dormir ' + hm(aj.meta) + ' o más', x => x.d.sueno && num(x.d.sueno.min) ? x.d.sueno.min >= aj.meta : null],
+      ['Una hora o más de sueño profundo', x => x.d.sueno && num(x.d.sueno.prof) ? x.d.sueno.prof >= 60 : null],
+      ['Entrenar ese día', x => x.d.act ? x.d.act.length > 0 : null],
+      ['Más de 8.000 pasos', x => num(x.d.pasos) ? x.d.pasos > 8000 : null],
+      ['Estrés medio por encima de 35', x => x.d.estres && num(x.d.estres.media) ? x.d.estres.media > 35 : null],
+      ['Día de uni', x => aj.uni.indexOf(semanaDia(x.d.dia)) >= 0],
+      ['Estudiar 2 h o más', x => ext(x.d, 'estudio') == null ? null : ext(x.d, 'estudio') >= 120],
+      ['Examen en los próximos 3 días', x => x.d.ext && x.d.ext.examen != null ? !!x.d.ext.examen : null],
+      ['Beber 2 litros de agua', x => ext(x.d, 'agua') == null ? null : ext(x.d, 'agua') >= 2000],
+      ['Tomar la creatina', x => x.d.ext && x.d.ext.creatina != null ? !!x.d.ext.creatina : null],
+      ['Comer 120 g de proteína o más', x => ext(x.d, 'prot') == null ? null : ext(x.d, 'prot') >= 120],
+      ['Gastar más de 20 €', x => ext(x.d, 'gasto') == null ? null : ext(x.d, 'gasto') > 20],
+    ];
+    SITUACIONES.forEach(t => factores.push(['«' + t + '»', x => (x.a.etiquetas || []).indexOf(t) >= 0]));
+    const out = [];
+    factores.forEach(f => {
+      const si = [], no = [];
+      filas.forEach(x => { const c = f[1](x); if (c === true) si.push(x.a[campo]); else if (c === false) no.push(x.a[campo]); });
+      if (si.length >= 4 && no.length >= 4) out.push({ nombre: f[0], v: media(si) - media(no), n: si.length });
+    });
+    return out.filter(e => Math.abs(e.v) >= .15).sort((x, y) => Math.abs(y.v) - Math.abs(x.v)).slice(0, 7);
+  }
+
+  // ---------- Cruces con tus otras apps ----------
+  function cruces(dias, animos, aj) {
+    aj = ajustes(aj);
+    const reg = delDia(animos);
+    const out = [];
+    const est = d => d.estres && num(d.estres.media) ? d.estres.media : null;
+    const comparar = (cond, valor) => {
+      const si = [], no = [];
+      dias.forEach(d => { const c = cond(d), v = valor(d); if (v == null || c == null) return; (c ? si : no).push(v); });
+      return si.length >= 3 && no.length >= 3 ? { si: media(si), no: media(no), n: si.length } : null;
+    };
+    const ex = comparar(d => d.ext && d.ext.examen != null ? !!d.ext.examen : null, est);
+    if (ex) out.push({ app: 'Plum', texto: 'Con un examen a menos de 3 días tu estrés medio es *' + Math.round(ex.si) + '*; el resto de días, ' + Math.round(ex.no) + '.' });
+    const uni = comparar(d => aj.uni.indexOf(semanaDia(d.dia)) >= 0, est);
+    if (uni) out.push({ app: 'Plum', texto: 'Los días de uni tu estrés sube *' + Math.round(uni.si - uni.no) + ' puntos* (' + Math.round(uni.si) + ' contra ' + Math.round(uni.no) + ').' });
+    const gasto = comparar(d => reg[d.dia] ? (reg[d.dia].animo <= 2 ? true : reg[d.dia].animo >= 4 ? false : null) : null, d => d.ext && num(d.ext.gasto) ? d.ext.gasto : null);
+    if (gasto) out.push({ app: 'Lima', texto: 'Los días de ánimo bajo gastas *' + Math.round(gasto.si) + ' €* de media; los días buenos, ' + Math.round(gasto.no) + ' €.' });
+    const agua = comparar(d => d.ext && num(d.ext.agua) ? d.ext.agua >= 2000 : null, d => reg[d.dia] && num(reg[d.dia].energia) ? reg[d.dia].energia : null);
+    if (agua) out.push({ app: 'Cherry', texto: 'Los días que bebes 2 litros tu energía es *' + coma(agua.si) + '* sobre 5; si no, ' + coma(agua.no) + '.' });
+    const prot = comparar(d => d.ext && num(d.ext.prot) ? d.ext.prot >= 120 : null, d => { const n = dias.find(x => x.dia === diaMas(d.dia, 1)); return n && n.bat && num(n.bat.max) ? n.bat.max : null; });
+    if (prot) out.push({ app: 'Cherry', texto: 'Después de un día con 120 g de proteína o más te levantas con la batería a *' + Math.round(prot.si) + '*; si no, a ' + Math.round(prot.no) + '.' });
+    const rod = comparar(d => d.act ? d.act.some(a => a.t === 'run') : null, d => d.ext && num(d.ext.rodilla) ? d.ext.rodilla : null);
+    if (rod) out.push({ app: 'Tangerine', texto: 'Los días que corres la rodilla marca *' + coma(rod.si) + '* sobre 10; el resto, ' + coma(rod.no) + '.' });
+    return out;
+  }
+
+  // ---------- Qué te recomiendo hoy ----------
+  function consejos(hoy, d, b, aj, est, intra, ext, ahoraMin) {
+    aj = ajustes(aj);
+    const out = [];
+    const hd = horaDormir(hoy, d, aj);
+    out.push({ hora: hd.hora, titulo: 'A la cama a las ' + hd.hora, texto: 'Mañana te levantas a las ' + hd.despertar + '. Así duermes ' + hm(hd.min) + (hd.min > aj.meta ? ', un poco más para recuperar lo de anoche.' : '.') });
+    const t = ext && ext.tangerine && ext.tangerine.hoy;
+    const pasada = t && aMin(t.hora) != null && ahoraMin - aMin(t.hora) > 90;
+    if (t && t.clase !== 'off' && !t.hecho && pasada) {
+      out.push({ hora: t.hora, app: 'tangerine', titulo: t.titulo + ': aún sin hacer', texto: 'Era a las ' + t.hora + '. Si hoy ya no la vas a hacer, muévela en Tangerine.' });
+    } else if (t && t.clase !== 'off' && !t.hecho && est.entreno) {
+      out.push({
+        hora: t.hora || 'Hoy', app: 'tangerine',
+        titulo: t.titulo + (est.entreno === 'normal' ? ': a por ella' : est.entreno === 'suave' ? ': hazla suave' : ': mejor otro día'),
+        texto: est.entreno === 'normal' ? 'Llegas con el cuerpo recuperado.' : est.entreno === 'suave' ? 'Haz las series, pero deja 2 o 3 repeticiones en la recámara.' : 'Muévela en Tangerine o cámbiala por movilidad.',
+      });
+    } else if (est.entreno && !(d.act && d.act.length)) {
+      out.push({ hora: 'Hoy', titulo: est.entreno === 'normal' ? 'Buen día para entrenar fuerte' : est.entreno === 'suave' ? 'Si entrenas, que sea suave' : 'Hoy, descanso', texto: est.entreno === 'descanso' ? 'Un paseo de 20 minutos ayuda más que una sesión dura.' : 'Según cómo has dormido y tu HRV de esta noche.' });
+    }
+    if (intra && intra.estres) {
+      // A qué hora sueles tener el estrés más alto (tramo de la tarde de hoy hasta ahora).
+      const pico = momentoEstres(intra, ahoraMin);
+      if (pico) out.push({ hora: 'Ahora', titulo: '2 minutos de respirar', texto: 'Tu estrés ha subido a ' + pico.max + '. Respirar en caja lo baja en un par de minutos.', accion: 'respirar' });
+    }
+    if (num(d.pasos) && ahoraMin >= 17 * 60 && d.pasos < 6000) out.push({ hora: 'Tarde', titulo: 'Sal a andar 15 minutos', texto: 'Llevas ' + d.pasos.toLocaleString('es-ES') + ' pasos. Andar un poco te ayuda a dormir mejor.' });
+    return out;
+  }
+
+  // ---------- Tu semana, en frases ----------
+  function resumenSemana(dias, animos, hoy, aj) {
+    aj = ajustes(aj);
+    const sem = dias.filter(d => d.dia > diaMas(hoy, -7) && d.dia <= hoy);
+    const antes = dias.filter(d => d.dia > diaMas(hoy, -14) && d.dia <= diaMas(hoy, -7));
+    const reg = delDia(animos);
+    const f = [];
+    const s1 = media(sem.map(d => d.sueno && d.sueno.min)), s0 = media(antes.map(d => d.sueno && d.sueno.min));
+    if (s1 != null) f.push('Has dormido *' + hm(s1) + '* de media' + (s0 != null && Math.abs(s1 - s0) >= 10 ? ', ' + hm(Math.abs(s1 - s0)) + (s1 > s0 ? ' más' : ' menos') + ' que la semana anterior.' : ', como la semana anterior.'));
+    const h1 = media(sem.map(d => d.hrv && d.hrv.n));
+    const b = base(dias, hoy);
+    if (h1 != null) f.push('Tu HRV media es *' + Math.round(h1) + ' ms*' + (b.hrv ? (h1 < b.hrv[0] ? ', por debajo de tu rango: esta semana has ido cargado.' : ', dentro de tu rango: el cuerpo aguanta bien.') : '.'));
+    const an = sem.map(d => reg[d.dia]).filter(Boolean);
+    if (an.length) {
+      const mejor = sem.filter(d => reg[d.dia]).sort((x, y) => reg[y.dia].animo - reg[x.dia].animo || ((y.sueno && y.sueno.min) || 0) - ((x.sueno && x.sueno.min) || 0))[0];
+      f.push('Tu ánimo medio ha sido *' + coma(media(an.map(a => a.animo))) + '* sobre 5. El mejor día, el *' + fechaCorta(mejor.dia) + '*' + (mejor.sueno && num(mejor.sueno.min) ? ': dormiste ' + hm(mejor.sueno.min) : '') + (mejor.act && mejor.act.length ? ' y entrenaste.' : '.'));
+    }
+    const ent = sem.filter(d => d.act && d.act.length).length;
+    const pasos = media(sem.map(d => d.pasos));
+    if (ent || pasos) f.push('Has entrenado *' + ent + (ent === 1 ? ' día' : ' días') + '*' + (pasos ? ' y andado ' + Math.round(pasos).toLocaleString('es-ES') + ' pasos al día.' : '.'));
+    const e1 = media(sem.map(d => d.estres && d.estres.media));
+    if (e1 != null) {
+      const peor = sem.filter(d => d.estres && num(d.estres.media)).sort((x, y) => y.estres.media - x.estres.media)[0];
+      f.push('Estrés medio *' + Math.round(e1) + '*; el día más tenso fue el ' + fechaCorta(peor.dia) + ' (' + peor.estres.media + ').');
+    }
+    return f;
+  }
+
+  // ---------- Informe del mes ----------
+  function informeMes(dias, animos, mes) {
+    const del = dias.filter(d => d.dia.slice(0, 7) === mes);
+    const reg = delDia(animos);
+    const an = del.map(d => reg[d.dia]).filter(Boolean);
+    const m = MESES[Number(mes.slice(5)) - 1];
+    const l = ['Melon · ' + m + ' de ' + mes.slice(0, 4), ''];
+    const s = media(del.map(d => d.sueno && d.sueno.min));
+    if (s != null) l.push('Sueño: ' + hm(s) + ' de media, ' + Math.round(media(del.map(d => d.sueno && d.sueno.pts)) || 0) + ' puntos.');
+    const h = media(del.map(d => d.hrv && d.hrv.n));
+    if (h != null) l.push('HRV: ' + Math.round(h) + ' ms de media.');
+    const r = media(del.map(d => d.reposo));
+    if (r != null) l.push('Pulso en reposo: ' + Math.round(r) + ' ppm.');
+    const e = media(del.map(d => d.estres && d.estres.media));
+    if (e != null) l.push('Estrés medio: ' + Math.round(e) + '.');
+    const p = media(del.map(d => d.pasos));
+    if (p != null) l.push('Pasos: ' + Math.round(p).toLocaleString('es-ES') + ' al día.');
+    const ent = del.filter(d => d.act && d.act.length).length;
+    l.push('Días con entreno: ' + ent + '.');
+    const kg = del.filter(d => num(d.kg));
+    if (kg.length >= 2) l.push('Peso: de ' + coma(kg[0].kg) + ' a ' + coma(kg[kg.length - 1].kg) + ' kg.');
+    if (an.length) {
+      l.push('Ánimo: ' + coma(media(an.map(a => a.animo))) + ' sobre 5 en ' + an.length + ' días apuntados.');
+      const cuenta = {};
+      an.forEach(a => (a.etiquetas || []).forEach(t => { cuenta[t] = (cuenta[t] || 0) + 1; }));
+      const top = Object.keys(cuenta).sort((x, y) => cuenta[y] - cuenta[x]).slice(0, 3);
+      if (top.length) l.push('Lo que más has sentido: ' + top.map(t => t.toLowerCase() + ' (' + cuenta[t] + ')').join(', ') + '.');
+      const grat = an.filter(a => a.gratitud).map(a => a.gratitud);
+      if (grat.length) l.push('', 'Cosas buenas del mes:', ...grat.slice(-5).map(g => '· ' + g));
+    }
+    const ef = efectos(dias.filter(d => d.dia.slice(0, 7) <= mes), animos, null, 'animo');
+    if (ef.length) l.push('', 'Lo que más te ha subido el ánimo: ' + ef.filter(x => x.v > 0).slice(0, 2).map(x => x.nombre.toLowerCase()).join(' y ') + '.');
+    return l.join('\n');
+  }
+
+  // ---------- Aviso al móvil (el atajo lo pide a varias horas) ----------
+  // ctx = { hoy, ahoraMin, dias, animos, intra, ajustes, avisado: { estres: 'yyyy-mm-dd HH:MM' } }
+  function aviso(ctx) {
+    const aj = ajustes(ctx.ajustes);
+    if (!aj.avisos) return '';
+    const h = ctx.ahoraMin / 60;
+    const d = ctx.dias.find(x => x.dia === ctx.hoy) || { dia: ctx.hoy };
+    const b = base(ctx.dias, ctx.hoy);
+    const reg = delDia(ctx.animos);
+    if (h >= 7 && h < 12) {
+      const r = resfriado(ctx.dias, b, ctx.hoy);
+      if (r && r.nivel === 'alerta') return plano(r.texto);
+      const baja = rachaBaja(ctx.animos, diaMas(ctx.hoy, -1));
+      if (baja) return plano(baja.texto);
+      const e = estado(d, b, aj, reg[ctx.hoy]);
+      return e.p == null ? '' : e.p + ' · ' + e.titulo + '. ' + plano(e.texto);
+    }
+    if (h >= 12 && h < 20.5) {
+      const m = momentoEstres(ctx.intra, ctx.ahoraMin);
+      if (m && !ctx.estresAvisado) return m.texto + ' Apúntalo en Melon o respira 2 minutos.';
+      return '';
+    }
+    if (h >= 20.5) {
+      const hd = horaDormir(ctx.hoy, d, aj);
+      let t = 'A la cama a las ' + hd.hora + ' para dormir ' + hm(hd.min) + ' antes de las ' + hd.despertar + '.';
+      if (!reg[ctx.hoy]) t += ' Y apunta en Melon cómo ha ido el día.';
+      if (semanaDia(ctx.hoy) === 0) t = 'Tu semana: ' + resumenSemana(ctx.dias, ctx.animos, ctx.hoy, aj).map(plano).join(' ') + '\n' + t;
+      return t;
+    }
+    return '';
+  }
+
+  return {
+    DIAS, MESES, ANIMO, ENERGIA, ETIQUETAS, SITUACIONES, AJUSTES, ajustes: ajustesDe,
+    clamp, num, media, mediana, diaMas, semanaDia, fechaCorta, hm, aMin, aHora, minNoche, coma, plano,
+    base, pilares, estado, horaDormir, resfriado, rachaBaja, rachaApuntar, delDia, momentoEstres, efectos, cruces, consejos, resumenSemana, informeMes, aviso,
+  };
+})();
+// </logica>
+
+// Crea o completa la hoja "Melon", la clave y el activador de cada hora. Se puede repetir sin miedo.
+function configurar() {
+  const props = PropertiesService.getScriptProperties();
+  // Una copia de otro proyecto puede traer la hoja de su dueño: si no se puede abrir, se empieza de cero.
+  if (props.getProperty('HOJA')) {
+    try {
+      SpreadsheetApp.openById(props.getProperty('HOJA'));
+    } catch (err) {
+      props.deleteProperty('HOJA');
+      props.deleteProperty('CLAVE');
+    }
+  }
+  if (!props.getProperty('HOJA')) {
+    const nuevo = SpreadsheetApp.create('Melon');
+    nuevo.setSpreadsheetTimeZone(TZ);
+    nuevo.setSpreadsheetLocale('es_ES');
+    nuevo.getSheets()[0].setName('Dias');
+    props.setProperty('HOJA', nuevo.getId());
+  }
+  const ss = libro_();
+  Object.keys(ESQUEMA).forEach(nombre => {
+    const h = ss.getSheetByName(nombre) || ss.insertSheet(nombre);
+    const ultima = h.getLastColumn();
+    const cab = ultima ? h.getRange(1, 1, 1, ultima).getValues()[0].map(String) : [];
+    const faltan = ESQUEMA[nombre].filter(c => cab.indexOf(c) < 0);
+    if (faltan.length) h.getRange(1, cab.length + 1, 1, faltan.length).setValues([faltan]);
+    h.setFrozenRows(1);
+  });
+  hoja_('Dias').getRange('A:A').setNumberFormat('@');
+  hoja_('Animo').getRange('C:C').setNumberFormat('@');
+  if (!props.getProperty('CLAVE')) props.setProperty('CLAVE', Utilities.getUuid().replace(/-/g, '').slice(0, 16));
+  // Un solo activador cada hora.
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'actualizar')) {
+    ScriptApp.newTrigger('actualizar').timeBased().everyHours(1).create();
+  }
+  Logger.log('Hoja: ' + ss.getUrl());
+  Logger.log('Clave: ' + props.getProperty('CLAVE'));
+}
+
+// Lo lanza el activador cada hora: Garmin siempre; tus otras apps, cada 6 horas.
+function actualizar() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('GARMIN_KEY')) garmin_(2, true);
+  if (Date.now() - Number(props.getProperty('APPS_CUANDO') || 0) > 6 * 3600000) apps_(false);
+}
+
+// ---------- Web ----------
+
+// GET ?k=CLAVE&accion=datos      → datos de la app en JSON
+// GET ?k=CLAVE&accion=widget     → lo de hoy en pocos números, para el widget de Scriptable
+// GET ?k=CLAVE&accion=aviso      → texto para la notificación del atajo (vacío si no hay nada que decir)
+// GET ?k=CLAVE&accion=scriptable → el código del widget, con tu dirección ya puesta
+// GET ?k=CLAVE&accion=informe    → días y ánimo en JSON (para que Claude lo repase)
+// GET (sin clave) o ?accion=instalar → página con el QR para abrir Melon en el iPhone
+function doGet(e) {
+  const p = e.parameter;
+  if (p.accion === 'instalar' || (!p.k && !p.accion)) return paginaInstalar_(p.k);
+  if (!claveValida_(p.k)) return p.accion === 'aviso' || p.accion === 'scriptable' ? texto_('Clave incorrecta') : json_({ error: 'Clave incorrecta' });
+  try {
+    if (p.accion === 'datos') return json_(datos_());
+    if (p.accion === 'widget') return json_(widget_(p.k));
+    if (p.accion === 'aviso') return texto_(aviso_());
+    if (p.accion === 'scriptable') return texto_(SCRIPTABLE_.replace('__URL__', ScriptApp.getService().getUrl() + '?k=' + encodeURIComponent(p.k) + '&accion=widget'));
+    if (p.accion === 'informe') return json_({ dias: dias_(), animos: animos_(), ajustes: ajustes_() });
+  } catch (err) {
+    return p.accion === 'aviso' ? texto_('') : json_({ error: err.message });
+  }
+  return json_({ error: 'Acción desconocida' });
+}
+
+// POST { api: 'accion', k, que, d } → { msg, datos }
+function doPost(e) {
+  let d;
+  try {
+    d = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return json_({ error: 'Petición mal formada' });
+  }
+  if (d.api !== 'accion') return json_({ error: 'Petición desconocida' });
+  try {
+    return json_(accion(d.k, d.que, d.d));
+  } catch (err) {
+    return json_({ error: err.message });
+  }
+}
+
+// ---------- Instalación ----------
+
+function paginaInstalar_(k) {
+  const exec = ScriptApp.getService().getUrl();
+  const ok = claveValida_(k);
+  const enlaceApp = WEB + '?api=' + idDe_(exec) + '&k=' + encodeURIComponent(k || '');
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const cuerpo = ok
+    ? '<h1>¡Tu Melon está lista!</h1>' +
+      '<p>Escanea este código con la <b>cámara del iPhone</b> y abre el enlace en Safari.<br><i>Escaneja aquest codi amb la càmera de l\'iPhone i obre l\'enllaç a Safari.</i></p>' +
+      '<div id="qr"></div>' +
+      '<p class="peq">Luego, en Safari: <b>Compartir → Añadir a pantalla de inicio</b>.<br><i>Després, a Safari: Comparteix → Afegeix a la pantalla d\'inici.</i></p>' +
+      '<p class="peq">El enlace, por si lo quieres copiar (no lo compartas: lleva tu clave):</p><input readonly value="' + esc(enlaceApp) + '" onclick="this.select()">' +
+      '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>' +
+      '<script>new QRCode(document.getElementById("qr"), { text: ' + JSON.stringify(enlaceApp) + ', width: 260, height: 260, colorDark: "#0b0e0e", colorLight: "#ffffff" });</script>'
+    : '<h1>Instalar Melon</h1>' +
+      '<p>Pega la <b>clave</b> que salió en el registro al ejecutar <b>configurar</b>.<br><i>Enganxa la clau que va sortir al registre en executar configurar.</i></p>' +
+      (k ? '<p class="mal">Esa clave no es correcta. · <i>Aquesta clau no és correcta.</i></p>' : '') +
+      '<form method="get" action="' + esc(exec) + '" target="_top"><input type="hidden" name="accion" value="instalar">' +
+      '<input name="k" placeholder="Clave · Clau" autocomplete="off" required><button>Continuar</button></form>';
+  const html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><style>' +
+    'body{margin:0;background:#0b0e0e;color:#eef4f2;font:17px/1.45 system-ui,-apple-system,sans-serif;display:flex;justify-content:center}' +
+    'main{max-width:460px;padding:40px 24px;text-align:center}h1{font-size:30px;margin:18px 0 10px}' +
+    '.logo{width:84px;height:84px;border-radius:20px;background:#5fd9c3;margin:0 auto;display:flex;align-items:center;justify-content:center}' +
+    '#qr{display:inline-block;background:#fff;padding:16px;border-radius:18px;margin:14px 0}i{color:#93a19d}.peq{font-size:14px}.mal{color:#ffc95c}' +
+    'input{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;border:1px solid #283131;background:#141919;color:#eef4f2;font-size:15px;margin:8px 0}' +
+    'button{width:100%;padding:14px;border:0;border-radius:14px;background:#5fd9c3;color:#0b0e0e;font-weight:700;font-size:17px;cursor:pointer}' +
+    '</style></head><body><main><div class="logo">' + LOGO_SVG_ + '</div>' + cuerpo + '</main></body></html>';
+  return HtmlService.createHtmlOutput(html).setTitle('Instalar Melon')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+const LOGO_SVG_ = '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#0b0e0e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18a9 9 0 0 1-18 0z"/><path d="M6 9a6 6 0 0 0 12 0"/><circle cx="9" cy="12" r=".6" fill="#0b0e0e"/><circle cx="12" cy="13.5" r=".6" fill="#0b0e0e"/><circle cx="15" cy="12" r=".6" fill="#0b0e0e"/></svg>';
+
+function idDe_(exec) {
+  return (String(exec || '').match(/\/s\/([\w-]+)\//) || [])[1] || '';
+}
+
+// ---------- Llamadas de la app ----------
+
+function accion(k, que, d) {
+  comprobar_(k);
+  if (!ACCIONES_[que]) throw new Error('Acción desconocida: ' + que);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  let msg;
+  try {
+    msg = ACCIONES_[que](d || {});
+  } finally {
+    lock.releaseLock();
+  }
+  return { msg: msg || '', datos: datos_(true) };
+}
+
+const ACCIONES_ = {
+  // { id, dia, tipo: 'dia'|'momento', animo 1–5, energia?, etiquetas[], linea, gratitud, cuando }
+  // El del día es uno por día (el último manda); los momentos se suman.
+  animo: d => {
+    const dia = diaValido_(d.dia);
+    if (!dia) throw new Error('Falta el día');
+    const animo = Math.round(numero_(d.animo));
+    if (!(animo >= 1 && animo <= 5)) throw new Error('El ánimo va de 1 a 5');
+    const energia = d.energia == null || d.energia === '' ? '' : Math.round(numero_(d.energia));
+    if (energia !== '' && !(energia >= 1 && energia <= 5)) throw new Error('La energía va de 1 a 5');
+    const tipo = d.tipo === 'momento' ? 'momento' : 'dia';
+    const etiquetas = [].concat(d.etiquetas || []).map(x => limpiar_(x).slice(0, 40)).filter(Boolean).slice(0, 12);
+    const fila = {
+      id: idValido_(d.id) || nuevoId_('a'),
+      cuando: /^\d{4}-\d{2}-\d{2}T/.test(String(d.cuando)) ? String(d.cuando) : new Date().toISOString(),
+      dia, tipo, animo, energia, etiquetas: etiquetas.join(', '),
+      linea: limpiar_(d.linea).slice(0, 280), gratitud: limpiar_(d.gratitud).slice(0, 280),
+    };
+    const filas = leer_('Animo');
+    const ya = filas.find(r => String(r.id) === fila.id) || (tipo === 'dia' && filas.find(r => r.tipo === 'dia' && diaTexto_(r.dia) === dia));
+    if (ya) actualizar_('Animo', ya._fila, fila);
+    else anadir_('Animo', fila);
+    return 'Guardado';
+  },
+  borrarAnimo: d => { borrarDonde_('Animo', r => String(r.id) === d.id); return 'Borrado'; },
+
+  // { despertar: [7 × 'HH:MM'], meta: min, uni: [0–6], avisos }
+  ajustes: d => {
+    const a = ajustes_();
+    if (d.despertar) {
+      const v = [].concat(d.despertar).map(String);
+      if (v.length !== 7 || !v.every(h => /^([01]\d|2[0-3]):[0-5]\d$/.test(h))) throw new Error('Horas de despertar no válidas');
+      a.despertar = v;
+    }
+    if (d.meta != null) {
+      const m = Math.round(numero_(d.meta));
+      if (!(m >= 300 && m <= 600)) throw new Error('El sueño que quieres va de 5 a 10 horas');
+      a.meta = m;
+    }
+    if (d.uni) a.uni = [].concat(d.uni).map(Number).filter(n => n >= 0 && n <= 6);
+    if (d.avisos != null) a.avisos = !!d.avisos;
+    PropertiesService.getScriptProperties().setProperty('AJUSTES', JSON.stringify(a));
+    return 'Guardado';
+  },
+
+  // { garmin: 'clave' } conecta y trae 90 días; '' desconecta.
+  garmin: d => {
+    const props = PropertiesService.getScriptProperties();
+    CacheService.getScriptCache().remove('GARMIN_TOKEN');
+    const clave = String(d.garmin || '').trim();
+    if (!clave) {
+      ['GARMIN_KEY', 'GARMIN_ESTADO', 'HOY', 'FORMA'].forEach(x => props.deleteProperty(x));
+      return 'Garmin desconectado';
+    }
+    props.setProperty('GARMIN_KEY', clave);
+    const r = garmin_(DIAS_INICIO, true);
+    if (!r.ok) {
+      props.deleteProperty('GARMIN_KEY');
+      throw new Error(r.error);
+    }
+    return 'Garmin conectado: ' + r.dias + ' días';
+  },
+
+  // { app: 'plum', enlace: 'https://hidegalaxy.github.io/plum/?api=…&k=…' } ('' para quitarla)
+  conexion: d => {
+    if (APPS.indexOf(d.app) < 0) throw new Error('App desconocida');
+    const props = PropertiesService.getScriptProperties();
+    const c = conexiones_();
+    const enlace = String(d.enlace || '').trim();
+    if (!enlace) {
+      delete c[d.app];
+      props.setProperty('CONEXIONES', JSON.stringify(c));
+      return 'Conexión quitada';
+    }
+    const api = (enlace.match(/[?&]api=([\w-]{20,})/) || enlace.match(/\/s\/([\w-]{20,})\//) || [])[1];
+    const k = (enlace.match(/[?&]k=([^&#\s]+)/) || [])[1];
+    if (!api || !k) throw new Error('No encuentro la dirección y la clave en ese enlace');
+    c[d.app] = { api, k: decodeURIComponent(k) };
+    props.setProperty('CONEXIONES', JSON.stringify(c));
+    const r = app_(d.app, c[d.app], true);
+    if (!r.ok) {
+      delete c[d.app];
+      props.setProperty('CONEXIONES', JSON.stringify(c));
+      throw new Error(r.error);
+    }
+    return 'Conectada';
+  },
+
+  actualizar: () => {
+    const props = PropertiesService.getScriptProperties();
+    if (!props.getProperty('GARMIN_KEY')) throw new Error('Garmin no está conectado');
+    const r = garmin_(3, true);
+    if (!r.ok) throw new Error(r.error);
+    apps_(false);
+    return 'Al día';
+  },
+};
+
+// ---------- Datos para la app ----------
+
+function datos_(sinGarmin) {
+  const props = PropertiesService.getScriptProperties();
+  // Al abrir la app, si hace más de 15 min que no se miró Garmin, se mira ya (solo hoy y ayer).
+  if (!sinGarmin && props.getProperty('GARMIN_KEY')) {
+    const e = leerJSON_('GARMIN_ESTADO', {});
+    if (!e.cuando || Date.now() - new Date(e.cuando).getTime() > 15 * 60000) garmin_(1, true);
+  }
+  const c = conexiones_();
+  return {
+    hoy: hoy_(),
+    dias: dias_().filter(d => d.dia >= diaMas_(hoy_(), -DIAS_APP)),
+    animos: animos_().filter(a => a.dia >= diaMas_(hoy_(), -DIAS_APP)),
+    intra: leerJSON_('HOY', null),
+    forma: leerJSON_('FORMA', null),
+    ajustes: ajustes_(),
+    garmin: Object.assign({ conectado: !!props.getProperty('GARMIN_KEY') }, leerJSON_('GARMIN_ESTADO', {})),
+    apps: APPS.reduce((o, a) => { o[a] = c[a] ? Object.assign({ conectada: true }, leerJSON_('APP_' + a, {})) : { conectada: false }; return o; }, {}),
+    ext: { tangerine: (leerJSON_('APP_tangerine', {}).widget) || null },
+  };
+}
+
+function dias_() {
+  return leer_('Dias').map(r => {
+    let x = {};
+    try { x = JSON.parse(String(r.datos || '{}')); } catch (err) {}
+    x.dia = diaTexto_(r.dia);
+    return x;
+  }).filter(x => diaValido_(x.dia)).sort((a, b) => (a.dia < b.dia ? -1 : 1));
+}
+
+function animos_() {
+  return leer_('Animo').map(r => ({
+    id: String(r.id), cuando: r.cuando instanceof Date ? r.cuando.toISOString() : String(r.cuando), dia: diaTexto_(r.dia), tipo: String(r.tipo || 'dia'),
+    animo: Number(r.animo), energia: r.energia === '' ? null : Number(r.energia),
+    etiquetas: String(r.etiquetas || '').split(',').map(s => s.trim()).filter(Boolean), linea: String(r.linea || ''), gratitud: String(r.gratitud || ''),
+  })).sort((a, b) => (a.cuando < b.cuando ? -1 : 1));
+}
+
+function ajustes_() {
+  return MELON.ajustes(leerJSON_('AJUSTES', {}));
+}
+
+function conexiones_() {
+  return leerJSON_('CONEXIONES', {});
+}
+
+// Lo de hoy en pocos números. El widget se refresca solo cada ~30 min.
+function widget_(k) {
+  const hoy = hoy_(), dias = dias_(), animos = animos_(), aj = ajustes_();
+  const d = dias.find(x => x.dia === hoy) || { dia: hoy };
+  const b = MELON.base(dias, hoy);
+  const reg = MELON.delDia(animos);
+  const e = MELON.estado(d, b, aj, reg[hoy]);
+  const p = e.pilares;
+  return {
+    hoy, p: e.p, titulo: e.titulo,
+    sueno: p.sueno ? { valor: p.sueno.valor, chip: p.sueno.chip } : null,
+    cuerpo: p.cuerpo ? { valor: p.cuerpo.valor, chip: p.cuerpo.chip } : null,
+    energia: p.energia ? { valor: p.energia.valor, chip: p.energia.chip } : null,
+    mente: p.mente ? { valor: p.mente.valor, chip: p.mente.chip } : null,
+    animo: reg[hoy] ? reg[hoy].animo : null,
+    dormir: MELON.horaDormir(hoy, d, aj).hora,
+    app: WEB + '?api=' + idDe_(ScriptApp.getService().getUrl()) + '&k=' + encodeURIComponent(k),
+  };
+}
+
+// Texto para la notificación del atajo. Un pico de estrés se avisa como mucho una vez cada 3 horas.
+function aviso_() {
+  const props = PropertiesService.getScriptProperties();
+  const ahora = new Date();
+  const hora = Utilities.formatDate(ahora, TZ, 'HH:mm').split(':').map(Number);
+  const ultimo = Number(props.getProperty('AVISO_ESTRES') || 0);
+  const t = MELON.aviso({
+    hoy: hoy_(), ahoraMin: hora[0] * 60 + hora[1], dias: dias_(), animos: animos_(), intra: leerJSON_('HOY', null),
+    ajustes: ajustes_(), estresAvisado: Date.now() - ultimo < 3 * 3600000,
+  });
+  if (/estrés ha subido/.test(t)) props.setProperty('AVISO_ESTRES', String(Date.now()));
+  return t;
+}
+
+// ---------- Garmin ----------
+
+// Trae los últimos `n` días (y, con `detalle`, el estrés y la batería de hoy minuto a minuto).
+function garmin_(n, detalle) {
+  const props = PropertiesService.getScriptProperties();
+  const clave = props.getProperty('GARMIN_KEY');
+  if (!clave) return { ok: false, error: 'Garmin no está conectado' };
+  const guardarEstado = o => props.setProperty('GARMIN_ESTADO', JSON.stringify(Object.assign({ cuando: new Date().toISOString() }, o)));
+  try {
+    const token = tokenGarmin_(clave);
+    const hoy = hoy_(), desde = diaMas_(hoy, -n);
+    const leer = ruta => { try { return JSON.parse(pedirGarmin_(token, ruta).getContentText()); } catch (err) { if (/pase|clave/.test(err.message)) throw err; return null; } };
+    const nuevo = {};
+    const dia = d => (nuevo[d] = nuevo[d] || {});
+    const tramos = (dias, f) => { for (let a = desde; a <= hoy; a = diaMas_(a, dias)) f(a, minDia_(diaMas_(a, dias - 1), hoy)); };
+
+    // Resumen del día: batería, estrés, pulso en reposo, respiración, oxígeno e intensidad.
+    tramos(90, (a, b) => {
+      const r = leer('/usersummary-service/v2/dailysummaries?startDate=' + a + '&endDate=' + b);
+      ((r && r.data) || (Array.isArray(r) ? r : [])).forEach(x => {
+        if (!x || !x.calendarDate) return;
+        const o = dia(x.calendarDate), bb = x.bodyBattery || {}, st = x.stress || {}, hr = x.heartRate || {}, im = x.intensityMinutes || {};
+        if (bb.maxValue != null) o.bat = { max: bb.maxValue, min: bb.minValue, ahora: bb.latestValue, carga: bb.chargedValue, gasto: bb.drainedValue };
+        if (st.avgLevel != null && st.avgLevel >= 0) o.estres = { media: st.avgLevel, max: st.maxLevel, alto: Math.round((st.highStressDurationInMillis || 0) / 60000), medio: Math.round((st.mediumStressDurationInMillis || 0) / 60000) };
+        if (hr.restingValue) o.reposo = hr.restingValue;
+        if (x.respiration && x.respiration.avgValue) o.resp = x.respiration.avgValue;
+        if (x.pulseOx && x.pulseOx.avgValue) o.spo2 = x.pulseOx.avgValue;
+        if (im.moderate != null) o.intensos = (im.moderate || 0) + 2 * (im.vigorous || 0);
+      });
+    });
+    // Sueño: Garmin deja pedir unas dos semanas de golpe. Se apunta en el día en que te despiertas.
+    tramos(14, (a, b) => {
+      const r = leer('/sleep-service/sleep/dailySleepSummariesByDate?startDate=' + a + '&endDate=' + b);
+      (Array.isArray(r) ? r : (r && r.dailySleepSummaries) || []).forEach(x => {
+        if (!x || !x.calendarDate || !x.sleepTimeSeconds) return;
+        const sc = x.sleepScores && x.sleepScores.overall;
+        const nec = x.sleepNeed && typeof x.sleepNeed === 'object' ? (x.sleepNeed.actual || x.sleepNeed.baseline) : x.sleepNeed;
+        dia(x.calendarDate).sueno = {
+          min: Math.round(x.sleepTimeSeconds / 60), pts: sc ? sc.value : null,
+          prof: min_(x.deepSleepSeconds), lig: min_(x.lightSleepSeconds), rem: min_(x.remSleepSeconds), desp: min_(x.awakeSleepSeconds),
+          ini: horaLocal_(x.sleepStartTimestampLocal), fin: horaLocal_(x.sleepEndTimestampLocal),
+          spo2: x.averageSpO2Value || null, spo2min: x.lowestSpO2Value || null, resp: x.averageRespirationValue || null,
+          fc: x.avgHeartRate || null, estres: x.avgSleepStress != null ? Math.round(x.avgSleepStress) : null, necesita: Number(nec) > 0 ? Number(nec) : null,
+        };
+      });
+    });
+    // HRV de la noche, con tu rango normal.
+    tramos(28, (a, b) => {
+      const r = leer('/hrv-service/hrv/daily/' + a + '/' + b);
+      ((r && r.hrvSummaries) || []).forEach(x => {
+        if (!x.calendarDate || !x.lastNightAvg) return;
+        dia(x.calendarDate).hrv = { n: x.lastNightAvg, sem: x.weeklyAvg || null, est: x.status || null, bajo: x.baseline ? x.baseline.balancedLow : null, alto: x.baseline ? x.baseline.balancedUpper : null };
+      });
+    });
+    tramos(28, (a, b) => {
+      const r = leer('/usersummary-service/stats/steps/daily/' + a + '/' + b);
+      (Array.isArray(r) ? r : []).forEach(x => {
+        if (!x.calendarDate || x.totalSteps == null) return;
+        dia(x.calendarDate).pasos = x.totalSteps;
+        dia(x.calendarDate).metaPasos = x.stepGoal || null;
+      });
+    });
+    const w = leer('/weight-service/weight/dateRange?startDate=' + desde + '&endDate=' + hoy);
+    ((w && w.dateWeightList) || []).forEach(x => {
+      if (!x.calendarDate || !x.weight) return;
+      dia(x.calendarDate).kg = Math.round((x.weight > 1000 ? x.weight / 1000 : x.weight) * 10) / 10;
+    });
+    // Entrenos (andar no cuenta como entreno).
+    const acts = leer('/activitylist-service/activities/search/activities?start=0&limit=' + Math.min(200, n * 3 + 10) + '&startDate=' + desde + '&endDate=' + hoy);
+    const porDia = {};
+    let vo2 = null;
+    const listaActs = Array.isArray(acts) ? acts : acts && (acts.activityList || acts.activities);
+    (listaActs || []).forEach(a => {
+      const ini = String(a.startTimeLocal || '');
+      const d = ini.slice(0, 10);
+      if (!diaValido_(d)) return;
+      const t = tipoActividad_((a.activityType && a.activityType.typeKey) || '');
+      if (a.vO2MaxValue && (!vo2 || d > vo2.dia)) vo2 = { v: a.vO2MaxValue, dia: d };
+      if (t === 'andar') return;
+      (porDia[d] = porDia[d] || []).push({ t, n: String(a.activityName || ''), min: Math.round((a.duration || 0) / 60), h: ini.slice(11, 16), carga: a.activityTrainingLoad ? Math.round(a.activityTrainingLoad) : null });
+    });
+    if (listaActs) for (let d = desde; d <= hoy; d = diaMas_(d, 1)) dia(d).act = (porDia[d] || []).sort((x, y) => (x.h < y.h ? -1 : 1));
+
+    if (detalle) {
+      const ready = leer('/metrics-service/metrics/trainingreadiness/' + hoy);
+      const rd = (Array.isArray(ready) ? ready : [ready]).filter(x => x && x.score != null)[0];
+      if (rd) dia(hoy).listo = { p: rd.score, nivel: rd.level || null };
+      const st = leer('/wellness-service/wellness/dailyStress/' + hoy);
+      if (st) props.setProperty('HOY', JSON.stringify(intradia_(st, hoy)));
+      // Edad física y VO2máx: cambian poco, una vez al día.
+      const forma = leerJSON_('FORMA', {});
+      if (forma.dia !== hoy || vo2) {
+        const fa = forma.dia === hoy ? null : leer('/fitnessage-service/fitnessage/v2/' + hoy);
+        if (fa) { forma.edad = fa.fitnessAge != null ? Math.round(fa.fitnessAge) : forma.edad; forma.dia = hoy; }
+        if (vo2 && (!forma.vo2 || vo2.dia >= (forma.vo2dia || ''))) { forma.vo2 = vo2.v; forma.vo2dia = vo2.dia; }
+        props.setProperty('FORMA', JSON.stringify(forma));
+      }
+    }
+    const cuantos = guardarDias_(nuevo);
+    guardarEstado({ ok: true });
+    return { ok: true, dias: cuantos };
+  } catch (err) {
+    guardarEstado({ ok: false, error: err.message });
+    return { ok: false, error: err.message };
+  }
+}
+
+// Estrés y batería de hoy en tramos de 15 min (96 por día), con la hora de Madrid.
+function intradia_(st, hoy) {
+  const paso = 15, estres = new Array(96).fill(null), bateria = new Array(96).fill(null);
+  const suma = new Array(96).fill(0), cuenta = new Array(96).fill(0);
+  const tramo = ts => {
+    if (Utilities.formatDate(new Date(ts), TZ, 'yyyy-MM-dd') !== hoy) return -1;
+    const h = Utilities.formatDate(new Date(ts), TZ, 'HH:mm').split(':').map(Number);
+    return Math.floor((h[0] * 60 + h[1]) / paso);
+  };
+  (st.stressValuesArray || []).forEach(x => {
+    const i = tramo(x[0]);
+    if (i >= 0 && x[1] >= 0) { suma[i] += x[1]; cuenta[i]++; }
+  });
+  for (let i = 0; i < 96; i++) if (cuenta[i]) estres[i] = Math.round(suma[i] / cuenta[i]);
+  // La batería: el último valor de cada tramo.
+  (st.bodyBatteryValuesArray || []).forEach(x => {
+    const i = tramo(x[0]), v = x[2];
+    if (i >= 0 && typeof v === 'number') bateria[i] = v;
+  });
+  return { dia: hoy, paso, estres, bateria, max: st.maxStressLevel != null ? st.maxStressLevel : null };
+}
+
+function tipoActividad_(k) {
+  if (/run/.test(k)) return 'run';
+  if (/strength|fitness_equipment|hiit|indoor_cardio/.test(k)) return 'fuerza';
+  if (/walk|hik/.test(k)) return 'andar';
+  if (/cycl|bik/.test(k)) return 'bici';
+  if (/yoga|pilates|breath|stretch|mobility/.test(k)) return 'flex';
+  if (/swim/.test(k)) return 'nadar';
+  return 'otro';
+}
+
+function min_(s) {
+  return s == null ? null : Math.round(s / 60);
+}
+
+// Garmin da la hora "local" como milisegundos que, leídos en UTC, son la hora del reloj.
+function horaLocal_(ms) {
+  return ms ? new Date(ms).toISOString().slice(11, 16) : null;
+}
+
+function minDia_(a, b) {
+  return a < b ? a : b;
+}
+
+// Mezcla lo nuevo con lo que ya había de cada día y lo escribe de una vez.
+function guardarDias_(nuevo) {
+  const h = hoja_('Dias');
+  const filas = leer_('Dias');
+  const pos = {};
+  filas.forEach(r => { pos[diaTexto_(r.dia)] = r; });
+  const ahora = new Date().toISOString();
+  let n = 0;
+  Object.keys(nuevo).sort().forEach(d => {
+    if (!diaValido_(d)) return;
+    const r = pos[d];
+    let viejo = {};
+    if (r) try { viejo = JSON.parse(String(r.datos || '{}')); } catch (err) {}
+    const mezcla = Object.assign(viejo, nuevo[d]);
+    delete mezcla.dia;
+    if (r) h.getRange(r._fila, 2, 1, 2).setValues([[JSON.stringify(mezcla), ahora]]);
+    else h.appendRow([d, JSON.stringify(mezcla), ahora]);
+    n++;
+  });
+  return n;
+}
+
+function tokenGarmin_(clave) {
+  const cache = CacheService.getScriptCache(), t = cache.get('GARMIN_TOKEN');
+  if (t) return t;
+  const r = UrlFetchApp.fetch(GARMIN_URL + '/personalapitoken-service/personal-api/personal-api-key/token', {
+    method: 'post', headers: { Authorization: 'ApiKey ' + clave, Accept: '*/*' }, muteHttpExceptions: true,
+  });
+  const c = r.getResponseCode();
+  if (c === 401 || c === 403 || c === 404) throw new Error('La clave de Garmin no vale o ha caducado');
+  if (c !== 200) throw new Error('Garmin no da acceso ahora (' + c + ')');
+  const token = r.getContentText().trim();
+  cache.put('GARMIN_TOKEN', token, 6 * 3600 - 60); // el pase dura 24 h; la caché, como mucho 6
+  return token;
+}
+
+function pedirGarmin_(token, ruta) {
+  const r = UrlFetchApp.fetch(GARMIN_URL + ruta, { headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' }, muteHttpExceptions: true });
+  const c = r.getResponseCode();
+  if (c === 401) {
+    CacheService.getScriptCache().remove('GARMIN_TOKEN');
+    throw new Error('Garmin ha caducado el pase; se pedirá otro');
+  }
+  if (c !== 200) throw new Error('Garmin ha contestado ' + c);
+  return r;
+}
+
+// ---------- Tus otras apps ----------
+
+function apps_(todo) {
+  const c = conexiones_();
+  Object.keys(c).forEach(a => app_(a, c[a], todo));
+  PropertiesService.getScriptProperties().setProperty('APPS_CUANDO', String(Date.now()));
+}
+
+// Lee lo que hace falta de cada app y lo apunta en `ext` de cada día. `todo`: la primera vez, más días.
+function app_(app, con, todo) {
+  const props = PropertiesService.getScriptProperties();
+  const url = q => 'https://script.google.com/macros/s/' + con.api + '/exec?k=' + encodeURIComponent(con.k) + '&' + q;
+  const pedir = q => {
+    const r = UrlFetchApp.fetch(url(q), { muteHttpExceptions: true, followRedirects: true });
+    if (r.getResponseCode() !== 200) throw new Error(nombreApp_(app) + ' no contesta (' + r.getResponseCode() + ')');
+    let j;
+    try { j = JSON.parse(r.getContentText()); } catch (err) { throw new Error(nombreApp_(app) + ' no ha contestado bien'); }
+    if (j && j.error) throw new Error(nombreApp_(app) + ': ' + j.error);
+    return j;
+  };
+  const hoy = hoy_();
+  const ext = {};
+  const pon = (d, o) => { if (diaValido_(d) && d <= hoy) ext[d] = Object.assign(ext[d] || {}, o); };
+  const estado = { cuando: new Date().toISOString() };
+  try {
+    if (app === 'tangerine') {
+      const w = pedir('accion=widget');
+      estado.widget = { hoy: w.hoy || null, manana: w.manana || null, rodilla: w.rodilla != null ? w.rodilla : null };
+      if (typeof w.rodilla === 'number') pon(hoy, { rodilla: w.rodilla });
+    }
+    if (app === 'plum') {
+      const inf = pedir('accion=informe');
+      const estudio = {};
+      (inf.sesiones || []).forEach(s => { if (s.estado === 'hecha' && diaValido_(s.dia)) estudio[s.dia] = (estudio[s.dia] || 0) + (Number(s.min) || 0); });
+      // Los exámenes que se han visto alguna vez se recuerdan (Plum solo da los que vienen).
+      const vistos = leerJSON_('EXAMENES', []);
+      (inf.examenes || []).forEach(e => { if (diaValido_(e.dia) && vistos.indexOf(e.dia) < 0) vistos.push(e.dia); });
+      props.setProperty('EXAMENES', JSON.stringify(vistos.sort().slice(-60)));
+      const primero = props.getProperty('PLUM_DESDE') || hoy;
+      props.setProperty('PLUM_DESDE', primero);
+      for (let d = diaMas_(hoy, todo ? -60 : -7); d <= hoy; d = diaMas_(d, 1)) {
+        const o = { estudio: estudio[d] || 0 };
+        if (d >= diaMas_(primero, -3)) o.examen = vistos.some(x => x >= d && x <= diaMas_(d, 3));
+        pon(d, o);
+      }
+    }
+    if (app === 'cherry') {
+      for (let i = 0; i < (todo ? 8 : 1); i++) {
+        const r = pedir('accion=datos&dia=' + diaMas_(hoy, -7 * i));
+        (r.semana || []).forEach(s => {
+          const o = {};
+          if (s.n > 0) { o.kcal = s.kcal; o.prot = s.prot; }
+          if (s.agua > 0) o.agua = s.agua;
+          if (s.n > 0 || s.agua > 0 || s.creatina) o.creatina = !!s.creatina;
+          if (Object.keys(o).length) pon(s.dia, o);
+        });
+      }
+    }
+    if (app === 'lima') {
+      for (let i = 0; i < (todo ? 3 : 1); i++) {
+        const mes = new Date(Date.UTC(+hoy.slice(0, 4), +hoy.slice(5, 7) - 1 - i, 1)).toISOString().slice(0, 7);
+        const r = pedir('accion=datos&mes=' + mes);
+        (r.diario || []).forEach((v, j) => pon(mes + '-' + String(j + 1).padStart(2, '0'), { gasto: Math.round(Number(v) || 0) }));
+      }
+    }
+    // Se mezcla dentro de `ext`, sin pisar lo que han dejado las otras apps.
+    const filas = {};
+    dias_().forEach(d => { filas[d.dia] = d.ext || {}; });
+    const nuevo = {};
+    Object.keys(ext).forEach(d => { nuevo[d] = { ext: Object.assign({}, filas[d] || {}, ext[d]) }; });
+    guardarDias_(nuevo);
+    estado.ok = true;
+    props.setProperty('APP_' + app, JSON.stringify(estado));
+    return { ok: true };
+  } catch (err) {
+    estado.ok = false;
+    estado.error = err.message;
+    props.setProperty('APP_' + app, JSON.stringify(estado));
+    return { ok: false, error: err.message };
+  }
+}
+
+function nombreApp_(a) {
+  return { tangerine: 'Tangerine', plum: 'Plum', cherry: 'Cherry', lima: 'Lima' }[a] || a;
+}
+
+// <scriptable>
+const SCRIPTABLE_ = "// Melon · widget para Scriptable (pequeño, mediano y pantalla de bloqueo).\n// Cópialo desde Melon → ⋯ → Widget del iPhone: así la dirección de tu servidor ya viene puesta.\nconst URL = '__URL__';\nconst C = { fondo: '#0b0e0e', caja: '#141919', texto: '#eef4f2', gris: '#93a19d', tenue: '#62706c', melon: '#5fd9c3', pista: '#283131', bien: '#7bd88f', ojo: '#ffc95c', mal: '#ff7a6b', nada: '#93a19d' };\nconst col = c => new Color(c);\nconst fam = config.widgetFamily || 'medium';\n\n// Datos del servidor; sin conexión, los últimos que se guardaron.\nlet d = null;\ntry {\n  const r = new Request(URL);\n  r.timeoutInterval = 10;\n  d = await r.loadJSON();\n} catch (e) {}\nconst fm = FileManager.local();\nconst cache = fm.joinPath(fm.documentsDirectory(), 'melon-widget.json');\nif (d && !d.error) fm.writeString(cache, JSON.stringify(d));\nelse if ((!d || !d.error) && fm.fileExists(cache)) d = Object.assign(JSON.parse(fm.readString(cache)), { viejo: true });\n\nconst w = new ListWidget();\nw.backgroundColor = col(C.fondo);\nw.refreshAfterDate = new Date(Date.now() + 30 * 60000);\nif (d && d.app) w.url = d.app;\n\nfunction texto(pila, t, color, fuente, lineas) {\n  const x = pila.addText(String(t));\n  x.textColor = col(color);\n  x.font = fuente;\n  x.lineLimit = lineas || 1;\n  x.minimumScaleFactor = 0.75;\n  return x;\n}\n// Anillo de la nota dibujado a mano (Scriptable no tiene anillos).\nfunction anillo(p, tam, grosor, fondo, color) {\n  const c = new DrawContext();\n  c.size = new Size(tam, tam);\n  c.opaque = false;\n  c.respectScreenScale = true;\n  const r = (tam - grosor) / 2, cx = tam / 2;\n  const punto = a => new Point(cx + r * Math.cos(a), cx + r * Math.sin(a));\n  c.setStrokeColor(col(fondo));\n  c.setLineWidth(grosor);\n  c.strokeEllipse(new Rect(grosor / 2, grosor / 2, tam - grosor, tam - grosor));\n  if (p > 0) {\n    const camino = new Path();\n    const pasos = Math.max(2, Math.round(p * 0.6));\n    for (let i = 0; i <= pasos; i++) {\n      const a = -Math.PI / 2 + (2 * Math.PI * p / 100) * (i / pasos);\n      i ? camino.addLine(punto(a)) : camino.move(punto(a));\n    }\n    c.addPath(camino);\n    c.setStrokeColor(col(color));\n    c.setLineWidth(grosor);\n    c.strokePath();\n  }\n  c.setFont(Font.boldRoundedSystemFont(tam * 0.32));\n  c.setTextColor(col(C.texto));\n  c.setTextAlignedCenter();\n  c.drawTextInRect(String(p == null ? '—' : p), new Rect(0, tam * 0.3, tam, tam * 0.4));\n  return c.getImage();\n}\nfunction fila(pila, eti, x) {\n  const f = pila.addStack();\n  f.centerAlignContent();\n  const p = f.addStack();\n  p.size = new Size(6, 6);\n  p.cornerRadius = 3;\n  p.backgroundColor = col(x ? C[x.chip[1]] || C.nada : C.pista);\n  f.addSpacer(6);\n  texto(f, eti, C.gris, Font.systemFont(11));\n  f.addSpacer();\n  texto(f, x ? x.valor : '—', C.texto, Font.semiboldSystemFont(11));\n}\n\nif (!d || d.error) {\n  w.setPadding(14, 14, 14, 14);\n  texto(w, 'Melon', C.melon, Font.boldSystemFont(16));\n  texto(w, d && d.error ? d.error : 'Sin conexión', C.gris, Font.systemFont(12), 2);\n} else if (fam === 'accessoryInline') {\n  texto(w, (d.p == null ? '' : d.p + ' · ') + d.titulo, C.texto, Font.systemFont(12));\n} else if (fam === 'accessoryCircular') {\n  const g = w.addImage(anillo(d.p || 0, 60, 6, '#555555', '#ffffff'));\n  g.centerAlignImage();\n} else if (fam === 'accessoryRectangular') {\n  texto(w, 'MELON · ' + (d.p == null ? '—' : d.p), C.texto, Font.semiboldSystemFont(10));\n  texto(w, d.titulo, C.texto, Font.boldSystemFont(13), 2);\n  texto(w, d.animo ? 'A la cama a las ' + d.dormir : 'Apunta tu ánimo', C.texto, Font.systemFont(11));\n} else if (fam === 'small') {\n  w.setPadding(14, 14, 12, 14);\n  const arriba = w.addStack();\n  arriba.centerAlignContent();\n  arriba.addImage(anillo(d.p || 0, 46, 5, C.pista, C.melon));\n  arriba.addSpacer();\n  texto(arriba, d.viejo ? 'SIN RED' : 'HOY', C.tenue, Font.semiboldSystemFont(10));\n  w.addSpacer(8);\n  texto(w, d.titulo, C.texto, Font.boldSystemFont(15), 3);\n  w.addSpacer();\n  texto(w, d.animo ? 'Cama: ' + d.dormir : '¿Cómo estás? Apúntalo', d.animo ? C.gris : C.melon, Font.semiboldSystemFont(11));\n} else {\n  // Mediano y grande: la nota y la frase a la izquierda, los cuatro pilares a la derecha.\n  w.setPadding(14, 16, 14, 16);\n  const f = w.addStack();\n  const izq = f.addStack();\n  izq.layoutVertically();\n  izq.size = new Size(140, 0);\n  izq.addImage(anillo(d.p || 0, 54, 6, C.pista, C.melon));\n  izq.addSpacer(8);\n  texto(izq, d.titulo, C.texto, Font.boldSystemFont(15), 3);\n  izq.addSpacer();\n  texto(izq, d.viejo ? 'Sin conexión · datos guardados' : 'A la cama a las ' + d.dormir, C.tenue, Font.systemFont(10));\n  f.addSpacer(12);\n  const der = f.addStack();\n  der.layoutVertically();\n  der.spacing = 7;\n  der.addSpacer(2);\n  fila(der, 'Sueño', d.sueno);\n  fila(der, 'Cuerpo', d.cuerpo);\n  fila(der, 'Energía', d.energia);\n  fila(der, 'Mente', d.mente);\n  der.addSpacer();\n  if (!d.animo) texto(der, '¿Cómo estás? Toca aquí', C.melon, Font.semiboldSystemFont(11));\n}\n\nScript.setWidget(w);\nScript.complete();\nif (config.runsInApp) fam === 'small' ? w.presentSmall() : w.presentMedium();\n";
+// </scriptable>
+
+// ---------- Hoja ----------
+
+let LIBRO_ = null;
+
+function libro_() {
+  if (!LIBRO_) {
+    const id = PropertiesService.getScriptProperties().getProperty('HOJA');
+    if (!id) throw new Error('Falta ejecutar configurar()');
+    LIBRO_ = SpreadsheetApp.openById(id);
+  }
+  return LIBRO_;
+}
+
+function hoja_(nombre) {
+  const ss = libro_();
+  let h = ss.getSheetByName(nombre);
+  if (!h && ESQUEMA[nombre]) {
+    h = ss.insertSheet(nombre);
+    h.getRange(1, 1, 1, ESQUEMA[nombre].length).setValues([ESQUEMA[nombre]]);
+    h.setFrozenRows(1);
+  }
+  if (!h) throw new Error('Falta la pestaña ' + nombre + ': ejecuta configurar()');
+  return h;
+}
+
+function cabecera_(h) {
+  return h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(String);
+}
+
+// Filas como objetos { columna: valor, _fila }. Se saltan las que tienen vacía la primera columna.
+function leer_(nombre) {
+  const v = hoja_(nombre).getDataRange().getValues();
+  const cab = v[0].map(String);
+  const out = [];
+  for (let i = 1; i < v.length; i++) {
+    if (v[i][0] === '' || v[i][0] == null) continue;
+    const o = { _fila: i + 1 };
+    cab.forEach((c, j) => { o[c] = v[i][j]; });
+    out.push(o);
+  }
+  return out;
+}
+
+function anadir_(nombre, obj) {
+  const h = hoja_(nombre);
+  h.appendRow(cabecera_(h).map(c => celda_(obj[c])));
+}
+
+function actualizar_(nombre, fila, cambios) {
+  const h = hoja_(nombre);
+  const cab = cabecera_(h);
+  Object.keys(cambios).forEach(c => {
+    const j = cab.indexOf(c);
+    if (j >= 0) h.getRange(fila, j + 1).setValue(celda_(cambios[c]));
+  });
+}
+
+// Borra de abajo arriba para que los números de fila no se desplacen.
+function borrarDonde_(nombre, cumple) {
+  const h = hoja_(nombre);
+  leer_(nombre).filter(cumple).map(r => r._fila).sort((a, b) => b - a).forEach(f => h.deleteRow(f));
+}
+
+// ---------- Utilidades ----------
+
+function claveValida_(k) {
+  return !!k && k === PropertiesService.getScriptProperties().getProperty('CLAVE');
+}
+
+function comprobar_(k) {
+  if (!claveValida_(k)) throw new Error('Clave incorrecta');
+}
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function texto_(s) {
+  return ContentService.createTextOutput(String(s)).setMimeType(ContentService.MimeType.TEXT);
+}
+
+function leerJSON_(prop, defecto) {
+  try {
+    const v = PropertiesService.getScriptProperties().getProperty(prop);
+    return v ? JSON.parse(v) : defecto;
+  } catch (err) {
+    return defecto;
+  }
+}
+
+function numero_(x) {
+  return Number(String(x == null ? '' : x).trim().replace(',', '.'));
+}
+
+// Texto que entra en la hoja: sin espacios sobrantes y sin convertirse en fórmula ("=algo").
+function limpiar_(s) {
+  s = String(s == null ? '' : s).trim();
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
+
+function celda_(v) {
+  if (v == null) return '';
+  return typeof v === 'string' && v.charAt(0) !== "'" ? limpiar_(v) : v;
+}
+
+function nuevoId_(letra) {
+  return letra + Utilities.getUuid().slice(0, 8);
+}
+
+// Los ids los inventa la app (para apuntar al instante y reintentar sin duplicar).
+function idValido_(id) {
+  return /^[\w-]{4,24}$/.test(String(id || '')) ? String(id) : '';
+}
+
+function diaValido_(s) {
+  const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return '';
+  const f = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return f.getUTCMonth() === +m[2] - 1 ? m[0] : '';
+}
+
+function diaTexto_(v) {
+  return v instanceof Date ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v || '').slice(0, 10);
+}
+
+function hoy_() {
+  return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+}
+
+function diaMas_(dia, n) {
+  const [y, m, d] = dia.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
