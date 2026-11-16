@@ -230,6 +230,141 @@
   .splash .nombre { font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
   .splash .frase { font-size: 14px; color: var(--muted); height: 20px; transition: opacity .25s; }
   @keyframes balanceo { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+
+  /* ================= Diseño v3 =================
+     Las mismas piezas que Lima y Plum, en melón: número que rueda y pestañas que se deslizan (Animate UI), anillo, barras y
+     líneas que crecen (Amicro Mono Charts), entrada en cascada (Motion Primitives), hoja con muelle (Cult UI) y foco de
+     luz que sigue al dedo (Aceternity). */
+  :root { --muelle: cubic-bezier(.3, 1.35, .5, 1); --suave: cubic-bezier(.2, .8, .2, 1); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* Toque: lo que se pulsa se hunde un poco. */
+  button, .btn { transition: transform .18s var(--suave), background-color .2s, color .2s, border-color .2s, opacity .2s; }
+  button:active:not(:disabled) { transform: scale(.96); }
+  nav button:active { transform: none; }
+  .pilar:active, .respirar:active { transform: scale(.98) !important; }
+  .cara[aria-pressed="true"]:active { transform: translateY(-2px) scale(.96); }
+
+  /* Número que rueda */
+  .rodillo { display: inline-flex; align-items: flex-start; }
+  .rd { display: inline-block; height: 1em; overflow: hidden; line-height: 1; white-space: pre; }
+  .rd > span { display: flex; flex-direction: column; transition: transform .95s cubic-bezier(.16, 1, .3, 1); }
+  .rd > span > i { display: block; height: 1em; line-height: 1; font-style: normal; text-align: center; }
+
+  /* Pestañas con píldora que se desliza */
+  nav { position: relative; }
+  nav .pildora { position: absolute; top: 11px; left: 0; height: 32px; display: flex; justify-content: center; pointer-events: none; transition: transform .5s var(--muelle), width .3s; }
+  nav .pildora::before { content: ''; width: 60px; height: 100%; border-radius: 999px; background: rgba(95,217,195,.14); box-shadow: inset 0 0 0 1px rgba(95,217,195,.22); }
+  nav button { position: relative; transition: color .25s; }
+  nav button[aria-selected="true"] svg { animation: salto .5s var(--muelle); }
+  @keyframes salto { 35% { transform: translateY(-3px) scale(1.12); } }
+
+  /* Segmentos (Ánimo/Energía, 14/30/90 días) con la misma píldora */
+  .segmento { position: relative; isolation: isolate; }
+  .segmento .pil { position: absolute; top: 3px; bottom: 3px; left: 0; border-radius: 9px; background: var(--track); z-index: -1; transition: transform .45s var(--muelle), width .3s var(--suave); }
+  .segmento.listo button[aria-pressed="true"] { background: none; }
+
+  /* Entrada en cascada al cambiar de pestaña */
+  main > * { flex-shrink: 0; }
+  .entra > .cae { animation: aparece .55s var(--suave) both; animation-delay: calc(var(--i, 0) * 45ms); }
+  @keyframes aparece { from { opacity: 0; transform: translateY(14px) scale(.985); } }
+
+  /* La tarjeta melón: foco de luz, grano y un barrido al entrar */
+  .hero { position: relative; overflow: hidden; isolation: isolate; --mx: 85%; --my: -10%; }
+  .hero::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(420px circle at var(--mx) var(--my), rgba(255,255,255,.5), transparent 55%); }
+  .hero::after {
+    content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .16; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  }
+  .brillo { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; border-radius: inherit; }
+  .brillo::before { content: ''; position: absolute; top: -20%; bottom: -20%; width: 40%; left: -60%; background: linear-gradient(100deg, transparent, rgba(255,255,255,.5), transparent); transform: skewX(-18deg); }
+  .entra .brillo::before { animation: barrido 1.4s .35s var(--suave) both; }
+  @keyframes barrido { to { left: 130%; } }
+
+  /* Anillo de la nota que se llena */
+  .anillo .v { stroke-dashoffset: var(--o); transition: stroke-dashoffset .8s var(--suave); }
+  .entra .anillo .v { animation: llenar 1.3s .2s var(--suave) both; }
+  @keyframes llenar { from { stroke-dashoffset: 100; } }
+
+  /* Pilares: foco que sigue al dedo, fases y rango que crecen, línea de batería que se dibuja */
+  .pilar { position: relative; overflow: hidden; isolation: isolate; --mx: 50%; --my: 0%; }
+  .pilar::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; transition: opacity .3s; background: radial-gradient(220px circle at var(--mx) var(--my), rgba(95,217,195,.13), transparent 60%); }
+  .pilar:hover::before, .pilar:active::before { opacity: 1; }
+  .fases i { transform-origin: left; }
+  .entra .fases i { animation: crecex .8s var(--suave) both; animation-delay: calc(.3s + var(--d, 0) * 90ms); }
+  @keyframes crecex { from { transform: scaleX(0); } }
+  .entra .rango em { animation: aparece0 .6s .35s both; }
+  .entra .rango i { animation: deslizaRango 1s .4s var(--muelle) both; }
+  @keyframes deslizaRango { from { left: 0; opacity: 0; } }
+  .entra .pilar svg { animation: revela 1.2s .35s var(--suave) both; }
+  @keyframes revela { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+  /* Gráficas: líneas que se dibujan, áreas que aparecen, barras que crecen y el último punto que late */
+  .entra .grafica .trazo { animation: dibuja 1.3s .2s var(--suave) both; }
+  @keyframes dibuja { from { stroke-dashoffset: 100; } }
+  .entra .grafica .area { animation: aparece0 1s .6s both; }
+  .grafica .b { transform-box: fill-box; transform-origin: bottom; }
+  .entra .grafica .b { animation: crecey .7s var(--suave) both; animation-delay: var(--d, 0s); }
+  @keyframes crecey { from { transform: scaleY(0); } }
+  .grafica .fin, .grafica .halo { transform-box: fill-box; transform-origin: center; }
+  .entra .grafica .fin { animation: punto .45s 1.2s var(--muelle) both; }
+  .grafica .halo { fill: none; stroke-width: 2; animation: halo 2.2s 1.6s ease-out infinite both; }
+  @keyframes halo { from { transform: scale(1); opacity: .7; } to { transform: scale(3.2); opacity: 0; } }
+  @keyframes punto { from { transform: scale(.2); opacity: 0; } }
+  .tip { animation: aparece0 .15s; }
+
+  /* Mind: calendario que se va llenando y barras que salen del centro */
+  .entra .calendario i { animation: punto .4s var(--muelle) both; animation-delay: calc(var(--d, 0) * 14ms + 150ms); }
+  .mueve .barra em { transform-origin: left; }
+  .mueve .barra em.neg { transform-origin: right; }
+  .entra .mueve .barra em { animation: crecex .9s var(--suave) both; animation-delay: calc(.25s + var(--d, 0) * 70ms); }
+  .respirar .bola { animation: respira 8s ease-in-out infinite; box-shadow: 0 0 0 0 rgba(95,217,195,.3); }
+  @keyframes respira { 0%, 100% { transform: scale(.86); box-shadow: 0 0 0 0 rgba(95,217,195,0); } 50% { transform: scale(1.05); box-shadow: 0 0 0 7px rgba(95,217,195,.12); } }
+
+  /* Ánimo: la cara elegida salta con una onda; al guardar, la cara entra girando */
+  .salta { animation: latidoOk .5s var(--muelle), onda .7s ease-out; }
+  .cara.salta svg { animation: girar .45s var(--muelle); }
+  @keyframes latidoOk { 40% { transform: scale(1.12); } }
+  @keyframes onda { from { box-shadow: 0 0 0 0 rgba(95,217,195,.65); } to { box-shadow: 0 0 0 12px rgba(95,217,195,0); } }
+  @keyframes girar { from { transform: rotate(-120deg) scale(.4); opacity: 0; } }
+  .hecho.nuevo svg { animation: girar .55s var(--muelle), ondaSvg .9s ease-out; border-radius: 50%; }
+  @keyframes ondaSvg { from { box-shadow: 0 0 0 0 rgba(95,217,195,.6); } to { box-shadow: 0 0 0 16px rgba(95,217,195,0); } }
+  .hecho.nuevo p { animation: aparece .5s .15s var(--suave) both; }
+  .btn[data-act="guardarAnimo"]:not(:disabled), .btn[data-act="guardarMomento"]:not(:disabled) { animation: activa .45s var(--muelle); }
+  @keyframes activa { 40% { transform: scale(1.03); } }
+
+  /* Hojas con muelle, asa y arrastrar para cerrar (Cult UI · Drawer) */
+  .velo { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: aparece0 .25s ease; }
+  .hoja { position: relative; padding-top: 32px; animation: subirH .5s var(--muelle); }
+  .hoja.cambia { animation: aparece .3s var(--suave); }
+  .hoja::before { content: ''; position: absolute; top: 11px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: var(--track); }
+  .velo.sale { animation: desaparece .22s ease both; pointer-events: none; }
+  .velo.sale .hoja { animation: bajarH .25s ease-in both; }
+  @keyframes aparece0 { from { opacity: 0; } }
+  @keyframes desaparece { to { opacity: 0; } }
+  @keyframes subirH { from { transform: translateY(100%); } }
+  @keyframes bajarH { to { transform: translateY(100%); } }
+
+  /* Respiración: entra suave, la bola brilla y un anillo marca los 4 segundos de cada paso */
+  .respiracion { animation: aparece0 .35s ease; }
+  .respiracion.sale { animation: desaparece .3s ease both; }
+  .caja-resp { position: relative; width: 236px; height: 236px; display: grid; place-items: center; }
+  .caja-resp svg { position: absolute; inset: 0; transform: rotate(-90deg); overflow: visible; }
+  .caja-resp circle { fill: none; stroke-width: 4; }
+  .caja-resp .pista { stroke: var(--track); }
+  .caja-resp .v { stroke: var(--melon); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; filter: drop-shadow(0 0 6px rgba(95,217,195,.6)); }
+  .respiracion .circulo { box-shadow: 0 0 60px 6px rgba(95,217,195,.28), inset -10px -14px 30px rgba(11,14,14,.25); }
+  .respiracion h2.cambia { animation: deAbajo .5s var(--suave); }
+  @keyframes deAbajo { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } }
+
+  /* Aviso con icono que sube con muelle (Animate UI · Toast) */
+  .toast { display: flex; align-items: center; gap: 10px; text-align: left; transform: translate(-50%, 16px) scale(.96); transition: opacity .2s, transform .45s var(--muelle); }
+  .toast .ic { flex: 0 0 22px; height: 22px; border-radius: 11px; display: grid; place-items: center; background: var(--ink); color: var(--melon); }
+  .toast.mal .ic { background: var(--mal); color: var(--ink); }
+  .toast.ver { transform: translate(-50%, 0); }
+  .carga.ver::after { width: 100%; left: 0; background: linear-gradient(90deg, transparent, var(--melon) 30%, #fff 50%, var(--melon) 70%, transparent); background-size: 200% 100%; animation: flujo 1s linear infinite; }
+  @keyframes flujo { to { background-position: -200% 0; } }
+
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 </head>
@@ -252,7 +387,7 @@
     </button>
   </header>
   <main id="main"></main>
-  <nav role="tablist" id="nav">
+  <nav role="tablist" id="nav"><i class="pildora" aria-hidden="true"></i>
     <button role="tab" data-tab="today" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Today</button>
     <button role="tab" data-tab="mind" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M9 14.5c1.6 1.4 4.4 1.4 6 0M9.5 10h.01M14.5 10h.01"/></svg>Mind</button>
     <button role="tab" data-tab="trends" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18l5-6 4 3 7-9"/></svg>Trends</button>
@@ -845,6 +980,12 @@ const MELON = (() => {
     setTimeout(() => {
       s.classList.add('fuera');
       clearInterval(cambiarFrase);
+      // La primera entrada se ve justo cuando se va la pantalla de carga, no detrás de ella.
+      if (D && !$('velo')) {
+        for (const k in NUMS) delete NUMS[k];
+        entrar = true;
+        repintar();
+      }
       setTimeout(() => s.remove(), 500);
     }, Math.max(0, 700 - (Date.now() - SPLASH_DESDE)));
   }
@@ -873,6 +1014,7 @@ const MELON = (() => {
     $('fecha').textContent = M.DIAS[f.getDay()].slice(0, 3) + ' ' + f.getDate() + ' ' + M.MESES[f.getMonth()].slice(0, 3);
     document.querySelectorAll('nav button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === vista));
     ({ today: vistaToday, mind: vistaMind, trends: vistaTrends })[vista]();
+    rematar();
   }
   // Repinta sin perder lo que se está escribiendo ni el sitio del scroll.
   function repintar() {
@@ -881,11 +1023,100 @@ const MELON = (() => {
     $('main').scrollTop = top;
   }
   function ir(tab) {
+    if (tab !== vista) entrar = true;
     vista = tab;
     try { localStorage.setItem('melon.vista', tab); } catch (e) {}
     pintar();
     $('main').scrollTop = 0;
   }
+
+  // ---------- Diseño v3: movimiento ----------
+
+  const QUIETO = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const NUMS = {};       // último número enseñado con cada clave: rueda desde ahí
+  const SEG = {};        // dónde estaba la píldora de cada segmento
+  let entrar = true;     // al pintar la próxima vez: entrada en cascada y gráficos que crecen
+
+  // Número grande que rueda: cada cifra es una tira 0-9 que se desliza hasta su sitio.
+  const rueda = (k, v) => `<span class="rodillo" data-rueda="${esc(k)}" data-v="${esc(v)}">${esc(v)}</span>`;
+  const ruedaSi = (k, v) => M.num(v) ? rueda(k, v) : esc(v);
+
+  function animarNumeros(raiz) {
+    raiz.querySelectorAll('[data-rueda]').forEach(el => {
+      const k = el.dataset.rueda, v = String(el.dataset.v), antes = NUMS[k];
+      NUMS[k] = v;
+      if (antes === v || QUIETO) return;
+      const nuevo = [...v], viejo = antes == null ? '' : antes;
+      el.innerHTML = `<span class="sr">${esc(v)}</span><span aria-hidden="true" class="rodillo">` + nuevo.map((c, p) => {
+        if (!/\d/.test(c)) return `<span class="rd">${esc(c)}</span>`;
+        const r = nuevo.length - 1 - p;
+        const oc = viejo[viejo.length - 1 - r] || '';
+        return `<span class="rd"><span style="transform:translateY(-${/\d/.test(oc) ? oc : 0}em);transition-delay:${(r * 0.06).toFixed(2)}s" data-fin="${c}">${'0123456789'.split('').map(n => `<i>${n}</i>`).join('')}</span></span>`;
+      }).join('') + '</span>';
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        el.querySelectorAll('[data-fin]').forEach(s => { s.style.transform = `translateY(-${s.dataset.fin}em)`; });
+      }));
+    });
+  }
+
+  function moverPildora() {
+    const b = document.querySelector('nav [aria-selected="true"]'), p = document.querySelector('nav .pildora');
+    if (!b || !p || !b.offsetWidth) return;
+    p.style.width = b.offsetWidth + 'px';
+    p.style.transform = `translateX(${b.offsetLeft}px)`;
+  }
+  window.addEventListener('resize', moverPildora);
+
+  // Segmentos: la píldora sale de donde estaba y se desliza hasta el botón elegido.
+  function pildorasSegmento(raiz) {
+    raiz.querySelectorAll('.segmento').forEach(s => {
+      const b = s.querySelector('[aria-pressed="true"]');
+      if (!b || !b.offsetWidth) return;
+      const k = s.getAttribute('aria-label'), antes = SEG[k], ahora = { x: b.offsetLeft, w: b.offsetWidth };
+      SEG[k] = ahora;
+      const p = document.createElement('i');
+      p.className = 'pil';
+      p.setAttribute('aria-hidden', 'true');
+      const poner = o => { p.style.width = o.w + 'px'; p.style.transform = `translateX(${o.x}px)`; };
+      poner(antes || ahora);
+      s.prepend(p);
+      s.classList.add('listo');
+      if (antes && (antes.x !== ahora.x || antes.w !== ahora.w)) { void p.offsetWidth; poner(ahora); }
+    });
+  }
+
+  // Después de pintar una pestaña: cascada, números que ruedan y píldoras en su sitio.
+  function rematar() {
+    const v = $('main');
+    v.classList.remove('entra');
+    if (entrar) {
+      entrar = false;
+      void v.offsetWidth;
+      v.classList.add('entra');
+      [...v.children].forEach((el, n) => { el.classList.add('cae'); el.style.setProperty('--i', Math.min(n, 10)); });
+    }
+    animarNumeros(v);
+    pildorasSegmento(v);
+    moverPildora();
+  }
+
+  // Salto con onda en lo que se acaba de tocar.
+  function saltar(el) {
+    if (!el || QUIETO) return;
+    el.classList.remove('salta');
+    void el.offsetWidth;
+    el.classList.add('salta');
+    setTimeout(() => el.classList.remove('salta'), 750);
+  }
+
+  // Foco de luz que sigue al dedo sobre la tarjeta melón y los pilares.
+  document.addEventListener('pointermove', e => {
+    const h = e.target.closest && e.target.closest('.hero, .pilar');
+    if (!h) return;
+    const r = h.getBoundingClientRect();
+    h.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    h.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  }, { passive: true });
 
   // ---------- Dibujos ----------
 
@@ -898,7 +1129,7 @@ const MELON = (() => {
   }
   const chip = c => c ? `<span class="chip ${c[1]}">${esc(c[0])}</span>` : '<span class="chip nada">Sin datos</span>';
   const fasesBar = s => [['profundo', s.prof], ['ligero', s.lig], ['rem', s.rem], ['despierto', s.desp]]
-    .filter(x => M.num(x[1]) && x[1] > 0).map(x => `<i style="flex:${x[1]};background:var(--${x[0]})"></i>`).join('');
+    .filter(x => M.num(x[1]) && x[1] > 0).map((x, i) => `<i style="flex:${x[1]};background:var(--${x[0]});--d:${i}"></i>`).join('');
 
   // Gráfica de líneas o barras con una sola escala; null = hueco. tip(i) da el texto al pasar el dedo.
   function grafica({ valores, min, max, tipo = 'linea', banda, meta, etiquetas, color = 'var(--melon)', tip, alto = 130, extra = '', unir = false }) {
@@ -927,7 +1158,7 @@ const MELON = (() => {
         if (!M.num(v)) return;
         const top = y(Math.max(min, v)), base = y(min), rr = Math.min(3, bw / 2, (base - top) / 2);
         const c = typeof color === 'function' ? color(v, i) : color;
-        s += `<path d="M${x(i) - bw / 2} ${base}V${top + rr}Q${x(i) - bw / 2} ${top} ${x(i) - bw / 2 + rr} ${top}H${x(i) + bw / 2 - rr}Q${x(i) + bw / 2} ${top} ${x(i) + bw / 2} ${top + rr}V${base}Z" fill="${c}"/>`;
+        s += `<path class="b" style="--d:${(i / n * .55).toFixed(3)}s" d="M${x(i) - bw / 2} ${base}V${top + rr}Q${x(i) - bw / 2} ${top} ${x(i) - bw / 2 + rr} ${top}H${x(i) + bw / 2 - rr}Q${x(i) + bw / 2} ${top} ${x(i) + bw / 2} ${top + rr}V${base}Z" fill="${c}"/>`;
       });
     } else {
       // Tramos seguidos sin huecos.
@@ -937,11 +1168,11 @@ const MELON = (() => {
       if (tramo.length) tramos.push(tramo);
       tramos.forEach(t => {
         const pts = t.map(p => p.join(',')).join(' ');
-        if (t.length > 1) s += `<polygon points="${t[0][0]},${y(min)} ${pts} ${t[t.length - 1][0]},${y(min)}" fill="${color}" opacity=".12"/><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+        if (t.length > 1) s += `<polygon class="area" points="${t[0][0]},${y(min)} ${pts} ${t[t.length - 1][0]},${y(min)}" fill="${color}" opacity=".12"/><polyline class="trazo" points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" pathLength="100" stroke-dasharray="100"/>`;
         else s += `<circle cx="${t[0][0]}" cy="${t[0][1]}" r="3" fill="${color}"/>`;
       });
       const ult = valores.map((v, i) => [v, i]).filter(p => M.num(p[0])).pop();
-      if (ult) s += `<circle cx="${x(ult[1])}" cy="${y(ult[0])}" r="4.5" fill="${color}" stroke="var(--bg)" stroke-width="2"/>`;
+      if (ult) s += `<circle class="halo" cx="${x(ult[1])}" cy="${y(ult[0])}" r="4.5" stroke="${color}"/><circle class="fin" cx="${x(ult[1])}" cy="${y(ult[0])}" r="4.5" fill="${color}" stroke="var(--bg)" stroke-width="2"/>`;
     }
     if (meta != null) s += `<line x1="${izq}" x2="${W - der}" y1="${y(meta)}" y2="${y(meta)}" stroke="var(--text)" stroke-width="1.2" stroke-dasharray="3 4" opacity=".6"/>`;
     s += typeof extra === 'function' ? extra(x, y) : extra;
@@ -986,16 +1217,15 @@ const MELON = (() => {
     const intra = D.intra && D.intra.dia === hoy ? D.intra : null;
     const rf = M.resfriado(D.dias, b, hoy);
     const rb = M.rachaBaja(D.animos, hoy);
-    const circ = 2 * Math.PI * 40;
     const p = e.pilares;
     let h = '';
     if (DEMO) h += `<div class="demo">Datos de ejemplo. Para ver los tuyos, <a href="https://hidegalaxy.github.io/melon/instalar.html" target="_blank" rel="noopener">instala tu servidor</a> y conecta tu Garmin.</div>`;
     if (rf && rf.nivel === 'alerta') h += `<section class="tarjeta mal"><span class="eti">Ojo con un resfriado</span><p>${neg(rf.texto)}</p></section>`;
     if (rb) h += `<section class="tarjeta ojo"><span class="eti">${rb.dias} días con el ánimo bajo</span><p>${neg(rb.texto)}</p><button class="btn sec" data-act="respirar">Respirar 2 minutos</button></section>`;
 
-    h += `<section class="hero">
+    h += `<section class="hero"><span class="brillo"></span>
       <span class="eti">Cómo estás hoy</span>
-      ${e.p == null ? '' : `<div class="anillo"><svg viewBox="0 0 92 92"><circle cx="46" cy="46" r="40" fill="none" stroke="rgba(11,14,14,.15)" stroke-width="9"/><circle cx="46" cy="46" r="40" fill="none" stroke="#0b0e0e" stroke-width="9" stroke-linecap="round" stroke-dasharray="${circ * e.p / 100} ${circ}"/></svg><div><span><b>${e.p}</b><small>DE 100</small></span></div></div>`}
+      ${e.p == null ? '' : `<div class="anillo"><svg viewBox="0 0 92 92"><circle cx="46" cy="46" r="40" fill="none" stroke="rgba(11,14,14,.15)" stroke-width="9"/><circle class="v" cx="46" cy="46" r="40" fill="none" stroke="#0b0e0e" stroke-width="9" stroke-linecap="round" pathLength="100" stroke-dasharray="100" style="--o:${100 - M.clamp(e.p, 0, 100)}"/></svg><div><span><b>${rueda('nota', e.p)}</b><small>DE 100</small></span></div></div>`}
       <h2 style="${e.p == null ? 'grid-column:1/-1' : ''}">${esc(e.titulo)}</h2>
       <p>${neg(e.texto)}</p>
       ${!D.garmin.conectado ? '<button class="btn" data-act="mas">Conectar Garmin</button>' : ''}
@@ -1008,25 +1238,25 @@ const MELON = (() => {
     h += `<section class="pilares">
       <button class="pilar" data-hoja="sueno">
         <div class="fila1"><span class="eti">Sueño</span>${chip(p.sueno && p.sueno.chip)}</div>
-        <strong class="num">${p.sueno ? esc(p.sueno.valor).replace(' h', '<small> h</small>') : '—'}</strong>
+        <strong class="num">${p.sueno ? (/^\d+ h \d+$/.test(p.sueno.valor) ? p.sueno.valor.split(' h ').map((x, i) => rueda('sueno' + i, x)).join('<small> h </small>') : esc(p.sueno.valor).replace(' h', '<small> h</small>')) : '—'}</strong>
         ${d.sueno ? `<div class="fases">${fasesBar(d.sueno)}</div>` : ''}
         <p>${p.sueno ? esc(p.sueno.texto) : 'Sin datos de anoche'}</p>
       </button>
       <button class="pilar" data-hoja="cuerpo">
         <div class="fila1"><span class="eti">Cuerpo</span>${chip(p.cuerpo && p.cuerpo.chip)}</div>
-        <strong class="num">${p.cuerpo && p.cuerpo.hrv ? p.cuerpo.hrv + '<small> ms HRV</small>' : p.cuerpo ? esc(p.cuerpo.valor) : '—'}</strong>
+        <strong class="num">${p.cuerpo && p.cuerpo.hrv ? ruedaSi('hrv', p.cuerpo.hrv) + '<small> ms HRV</small>' : p.cuerpo ? esc(p.cuerpo.valor) : '—'}</strong>
         ${p.cuerpo && p.cuerpo.hrv && b.hrv ? `<div class="rango"><em style="left:${pos(b.hrv[0])}%;right:${100 - pos(b.hrv[1])}%"></em><i style="left:${pos(p.cuerpo.hrv)}%"></i></div>` : ''}
         <p>${p.cuerpo ? esc(p.cuerpo.texto) : 'Sin HRV de anoche'}</p>
       </button>
       <button class="pilar" data-hoja="energia">
         <div class="fila1"><span class="eti">Energía</span>${chip(p.energia && p.energia.chip)}</div>
-        <strong class="num">${p.energia ? p.energia.valor + '<small> /100</small>' : '—'}</strong>
+        <strong class="num">${p.energia ? ruedaSi('energia', p.energia.valor) + '<small> /100</small>' : '—'}</strong>
         ${sp.length > 1 ? `<svg viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><polyline points="${spPts}" fill="none" stroke="var(--melon)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>` : ''}
         <p>${p.energia ? esc(p.energia.texto) : 'Sin Body Battery'}</p>
       </button>
       <button class="pilar" data-hoja="mente">
         <div class="fila1"><span class="eti">Mente</span>${chip(p.mente && p.mente.chip)}</div>
-        <strong class="num">${p.mente ? (reg[hoy] ? esc(p.mente.valor) : p.mente.valor + '<small> estrés</small>') : '—'}</strong>
+        <strong class="num">${p.mente ? (reg[hoy] ? esc(p.mente.valor) : ruedaSi('mente', p.mente.valor) + '<small> estrés</small>') : '—'}</strong>
         <p>${p.mente ? esc(p.mente.texto) + (reg[hoy] ? '' : ' ↓') : 'Apunta tu ánimo ↓'}</p>
       </button>
     </section>`;
@@ -1076,7 +1306,7 @@ const MELON = (() => {
     return grafica({
       valores: bat, min: 0, max: 100, alto: 140,
       etiquetas: [[0, '0 h'], [24, '6 h'], [48, '12 h'], [72, '18 h'], [95, '24 h']].map(e => [e[0] * 15 / paso, e[1]]),
-      extra: (x, y) => intra.estres.map((v, i) => i < hasta && M.num(v) && v > 0 ? `<rect x="${x(i) - 1}" width="2" y="${y(v * .35)}" height="${y(0) - y(v * .35)}" fill="${v >= 60 ? 'var(--mal)' : v >= 40 ? 'var(--ojo)' : 'var(--dim)'}" opacity=".8"/>` : '').join(''),
+      extra: (x, y) => intra.estres.map((v, i) => i < hasta && M.num(v) && v > 0 ? `<rect class="b" style="--d:${(.15 + i / n * .7).toFixed(3)}s" x="${x(i) - 1}" width="2" y="${y(v * .35)}" height="${y(0) - y(v * .35)}" fill="${v >= 60 ? 'var(--mal)' : v >= 40 ? 'var(--ojo)' : 'var(--dim)'}" opacity=".8"/>` : '').join(''),
       tip: i => i >= hasta ? '' : hora(i) + ' · batería ' + (M.num(bat[i]) ? bat[i] : '—') + (M.num(intra.estres[i]) ? ' · estrés ' + intra.estres[i] : ''),
     });
   }
@@ -1138,16 +1368,16 @@ const MELON = (() => {
     <section class="bloque">
       <header><h3>Tu ${campoMind === 'animo' ? 'ánimo' : 'energía'}, 5 semanas</h3><span class="eti">${vals.length ? 'Media ' + M.coma(M.media(vals)) : ''}</span></header>
       <div class="calendario">${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(x => `<span>${x}</span>`).join('')}
-        ${celdas.map(d => d > hoy ? '<i class="fuera"></i>' : `<i class="${d === hoy ? 'hoy' : ''}" title="${M.fechaCorta(d)} · ${valor(d) ? nombres[valor(d) - 1] : 'sin apuntar'}" style="${valor(d) ? 'background:' + COLOR_ANIMO[valor(d) - 1] : ''}"></i>`).join('')}
+        ${celdas.map((d, n) => d > hoy ? '<i class="fuera"></i>' : `<i class="${d === hoy ? 'hoy' : ''}" style="--d:${n};${valor(d) ? 'background:' + COLOR_ANIMO[valor(d) - 1] : ''}" title="${M.fechaCorta(d)} · ${valor(d) ? nombres[valor(d) - 1] : 'sin apuntar'}"></i>`).join('')}
       </div>
       <div class="leyenda">${nombres.map((a, i) => `<span><i style="background:${COLOR_ANIMO[i]}"></i>${a}</span>`).join('')}</div>
       ${racha ? `<p class="nota">Llevas <b>${racha} ${racha === 1 ? 'día' : 'días'} seguidos</b> apuntando.</p>` : ''}
     </section>
     <section class="bloque">
       <header><h3>Lo que mueve tu ${campoMind === 'animo' ? 'ánimo' : 'energía'}</h3></header>
-      ${efs.length ? `<div class="mueve">${efs.map(ef => {
+      ${efs.length ? `<div class="mueve">${efs.map((ef, n) => {
         const w = Math.min(50, Math.abs(ef.v) / 1.5 * 50);
-        return `<div><span>${esc(ef.nombre)}</span><span class="barra"><em style="${ef.v >= 0 ? 'left:50%;width:' + w + '%;background:var(--bien)' : 'right:50%;width:' + w + '%;background:var(--mal)'}"></em></span><b>${ef.v >= 0 ? '+' : '−'}${Math.abs(ef.v).toFixed(1).replace('.', ',')}</b></div>`;
+        return `<div><span>${esc(ef.nombre)}</span><span class="barra"><em class="${ef.v >= 0 ? '' : 'neg'}" style="--d:${n};${ef.v >= 0 ? 'left:50%;width:' + w + '%;background:var(--bien)' : 'right:50%;width:' + w + '%;background:var(--mal)'}"></em></span><b>${ef.v >= 0 ? '+' : '−'}${Math.abs(ef.v).toFixed(1).replace('.', ',')}</b></div>`;
       }).join('')}</div>
       <p class="nota">Puntos de diferencia (de 1 a 5) entre los días con y sin cada cosa. Lo que más te sube: <b>${esc((efs.find(x => x.v > 0) || efs[0]).nombre.toLowerCase())}</b>. Cuantos más días apuntes, más fino.</p>`
       : `<p class="nota">Cuando lleves unas dos semanas apuntando, aquí verás qué te sube y qué te baja ${campoMind === 'animo' ? 'el ánimo' : 'la energía'}: dormir, entrenar, la uni, tus etiquetas…</p>`}
@@ -1199,9 +1429,9 @@ const MELON = (() => {
     if (hay(kg)) h += bloque('gPeso', 'Peso', 'kg', '');
     const f = D.forma || {};
     h += `<section class="bloque"><header><h3>Forma física</h3></header><div class="cifras">
-      <div class="cifra"><b>${f.vo2 || '—'}</b><span>VO2máx${f.vo2dia ? ' · ' + M.fechaCorta(f.vo2dia) : ''}</span></div>
-      <div class="cifra"><b>${f.edad || '—'}</b><span>Edad física</span></div>
-      <div class="cifra"><b>${M.num(b.reposo) ? Math.round(b.reposo) : '—'}</b><span>Reposo normal (ppm)</span></div>
+      <div class="cifra"><b>${f.vo2 ? ruedaSi('vo2', f.vo2) : '—'}</b><span>VO2máx${f.vo2dia ? ' · ' + M.fechaCorta(f.vo2dia) : ''}</span></div>
+      <div class="cifra"><b>${f.edad ? ruedaSi('edad', f.edad) : '—'}</b><span>Edad física</span></div>
+      <div class="cifra"><b>${M.num(b.reposo) ? rueda('reposo', Math.round(b.reposo)) : '—'}</b><span>Reposo normal (ppm)</span></div>
       <div class="cifra"><b>${M.num(M.media(pasos)) ? (M.media(pasos) / 1000).toFixed(1).replace('.', ',') + 'k' : '—'}</b><span>Pasos al día</span></div>
     </div></section>`;
     if (!hay(sueno) && !hay(hrv)) h += `<p class="nota">Aún no hay bastantes días para las gráficas. Conecta tu Garmin en ⋯ y se traen los últimos 90 días.</p>`;
@@ -1222,16 +1452,51 @@ const MELON = (() => {
   // ---------- Hojas ----------
 
   function abrirHoja(html, alMontar) {
-    cerrarHoja();
+    // Si ya hay una hoja abierta, la nueva aparece en su sitio en vez de volver a subir.
+    const ya = $('velo');
+    if (ya) ya.remove();
     const v = document.createElement('div');
     v.className = 'velo';
     v.id = 'velo';
-    v.innerHTML = `<div class="hoja" role="dialog" aria-modal="true">${html}<button class="cerrar" data-act="cerrar">Cerrar</button></div>`;
+    v.innerHTML = `<div class="hoja ${ya ? 'cambia' : ''}" role="dialog" aria-modal="true">${html}<button class="cerrar" data-act="cerrar">Cerrar</button></div>`;
+    if (ya) v.style.animation = 'none';
     v.addEventListener('click', e => { if (e.target === v) cerrarHoja(); });
+    arrastrar(v);
     $('app').appendChild(v);
     if (alMontar) alMontar(v);
   }
-  function cerrarHoja() { const v = $('velo'); if (v) v.remove(); }
+  // Baja la hoja y la quita; deja de ser «la hoja abierta» al momento.
+  function cerrarHoja() {
+    const v = $('velo');
+    if (!v) return;
+    v.removeAttribute('id');
+    if (QUIETO) return v.remove();
+    v.classList.add('sale');
+    setTimeout(() => v.remove(), 260);
+  }
+  // Arrastrar la hoja hacia abajo la cierra.
+  function arrastrar(v) {
+    let h = null, y0 = 0, dy = 0;
+    v.addEventListener('touchstart', e => {
+      h = e.target.closest('.hoja');
+      if (!h || h.scrollTop > 0 || e.target.closest('input, select, textarea')) { h = null; return; }
+      y0 = e.touches[0].clientY;
+      dy = 0;
+      h.style.transition = 'none';
+    }, { passive: true });
+    v.addEventListener('touchmove', e => {
+      if (!h) return;
+      dy = Math.max(0, e.touches[0].clientY - y0);
+      h.style.transform = dy ? `translateY(${dy}px)` : '';
+    }, { passive: true });
+    v.addEventListener('touchend', () => {
+      if (!h) return;
+      h.style.transition = 'transform .35s var(--muelle)';
+      if (dy > 110) cerrarHoja();
+      else h.style.transform = '';
+      h = null;
+    });
+  }
 
   function hojaPilar(k) {
     const hoy = D.hoy, d = dia(hoy), b = M.base(D.dias, hoy), aj = D.ajustes, reg = M.delDia(D.animos);
@@ -1339,17 +1604,28 @@ const MELON = (() => {
   function respirar() {
     const r = document.createElement('div');
     r.className = 'respiracion';
-    r.innerHTML = '<div class="circulo"></div><div><h2>Inspira</h2><p>Vuelta 1 de 8</p></div><button class="btn sec">Terminar</button>';
+    r.innerHTML = '<div class="caja-resp"><svg width="236" height="236" viewBox="0 0 236 236" aria-hidden="true"><circle class="pista" cx="118" cy="118" r="114"/><circle class="v" cx="118" cy="118" r="114" pathLength="100"/></svg><div class="circulo"></div></div><div><h2>Inspira</h2><p>Vuelta 1 de 8</p></div><button class="btn sec">Terminar</button>';
     $('app').appendChild(r);
-    const c = r.querySelector('.circulo'), t = r.querySelector('h2'), p = r.querySelector('p');
+    const c = r.querySelector('.circulo'), t = r.querySelector('h2'), p = r.querySelector('p'), aro = r.querySelector('.caja-resp .v');
     const pasos = [['Inspira', 1], ['Mantén', 1], ['Suelta', .55], ['Mantén', .55]];
     let k = 0, vuelta = 1;
     let wake = null;
     try { navigator.wakeLock && navigator.wakeLock.request('screen').then(w => { wake = w; }).catch(() => {}); } catch (e) {}
-    const fin = () => { clearInterval(reloj); r.remove(); try { wake && wake.release(); } catch (e) {} };
+    const fin = () => {
+      clearInterval(reloj);
+      if (QUIETO) r.remove(); else { r.classList.add('sale'); setTimeout(() => r.remove(), 300); }
+      try { wake && wake.release(); } catch (e) {}
+    };
     const paso = () => {
       const [txt, escala] = pasos[k % 4];
-      t.textContent = txt; c.style.transform = 'scale(' + escala + ')';
+      t.textContent = txt;
+      t.classList.remove('cambia'); void t.offsetWidth; t.classList.add('cambia');
+      c.style.transform = 'scale(' + escala + ')';
+      // El anillo de fuera se llena en los 4 segundos de cada paso.
+      aro.style.transition = 'none';
+      aro.style.strokeDashoffset = 100;
+      void aro.getBoundingClientRect();
+      if (!QUIETO) { aro.style.transition = 'stroke-dashoffset 4s linear'; aro.style.strokeDashoffset = 0; }
       p.textContent = 'Vuelta ' + vuelta + ' de 8';
       k++; if (k % 4 === 0) vuelta++;
       if (vuelta > 8) { fin(); avisar('Hecho: 2 minutos'); }
@@ -1359,9 +1635,16 @@ const MELON = (() => {
     r.querySelector('button').onclick = fin;
   }
 
+  const OK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l4 4 10-10"/></svg>';
   function avisar(t) {
-    $('toast').textContent = t;
-    $('toast').classList.add('ver');
+    const x = $('toast');
+    const mal = /^(No |Error|Sin conexión|Primero|En la demo)/.test(t);
+    x.classList.toggle('mal', mal);
+    x.innerHTML = `<span class="ic">${mal ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 7v6M12 17h.01"/></svg>' : OK}</span><span></span>`;
+    x.lastChild.textContent = t;
+    x.classList.remove('ver');
+    void x.offsetWidth;
+    x.classList.add('ver');
     clearTimeout(avisar.t);
     avisar.t = setTimeout(() => $('toast').classList.remove('ver'), 3000);
   }
@@ -1378,19 +1661,25 @@ const MELON = (() => {
     const ds = t.dataset;
     if (ds.tab) return ir(ds.tab);
     if (ds.hoja) return hojaPilar(ds.hoja);
-    if (ds.rango) { rango = Number(ds.rango); try { localStorage.setItem('melon.rango', rango); } catch (err) {} return pintar(); }
-    if (ds.campo) { campoMind = ds.campo; return pintar(); }
-    if (ds.animo) { borrador.animo = Number(ds.animo); return pintarAnimo(); }
-    if (ds.energia) { borrador.energia = borrador.energia === Number(ds.energia) ? null : Number(ds.energia); return pintarAnimo(); }
+    if (ds.rango) { if (rango !== Number(ds.rango)) entrar = true; rango = Number(ds.rango); try { localStorage.setItem('melon.rango', rango); } catch (err) {} return pintar(); }
+    if (ds.campo) { if (campoMind !== ds.campo) entrar = true; campoMind = ds.campo; return pintar(); }
+    if (ds.animo) { borrador.animo = Number(ds.animo); pintarAnimo(); return saltar(document.querySelector(`[data-animo="${ds.animo}"]`)); }
+    if (ds.energia) {
+      borrador.energia = borrador.energia === Number(ds.energia) ? null : Number(ds.energia);
+      pintarAnimo();
+      return borrador.energia && saltar(document.querySelector(`[data-energia="${ds.energia}"]`));
+    }
     if (ds.etiqueta) {
       const i = borrador.etiquetas.indexOf(ds.etiqueta);
       i < 0 ? borrador.etiquetas.push(ds.etiqueta) : borrador.etiquetas.splice(i, 1);
+      if (i < 0) saltar(t);
       return t.setAttribute('aria-pressed', i < 0);
     }
-    if (ds.momento) { momento.animo = Number(ds.momento); return pintarMomento(M.momentoEstres(D.intra, ahoraMin())); }
+    if (ds.momento) { momento.animo = Number(ds.momento); pintarMomento(M.momentoEstres(D.intra, ahoraMin())); return saltar(document.querySelector(`[data-momento="${ds.momento}"]`)); }
     if (ds.momEti) {
       const i = momento.etiquetas.indexOf(ds.momEti);
       i < 0 ? momento.etiquetas.push(ds.momEti) : momento.etiquetas.splice(i, 1);
+      if (i < 0) saltar(t);
       return t.setAttribute('aria-pressed', i < 0);
     }
     if (ds.uni) {
@@ -1417,8 +1706,11 @@ const MELON = (() => {
       case 'guardarAnimo': {
         if (!borrador || !borrador.animo) return;
         const ya = M.delDia(D.animos)[D.hoy];
-        enviar('animo', Object.assign({ id: ya ? ya.id : nid('a'), dia: D.hoy, tipo: 'dia', cuando: new Date().toISOString() }, borrador));
-        borrador = null;
+        const reg = Object.assign({ id: ya ? ya.id : nid('a'), dia: D.hoy, tipo: 'dia', cuando: new Date().toISOString() }, borrador);
+        borrador = null; // antes de pintar: la tarjeta pasa al momento a «hecho»
+        enviar('animo', reg);
+        const hecho = document.querySelector('#animo .hecho');
+        if (hecho && !QUIETO) hecho.classList.add('nuevo');
         return avisar('Guardado');
       }
       case 'guardarMomento': {
